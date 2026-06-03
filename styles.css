@@ -28,9 +28,24 @@ body {
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.brand {
+  flex: 0 0 auto;
+}
+
+.brand img {
+  display: block;
+  width: 224px;
+  max-width: 42vw;
+  height: auto;
+}
+
+.titleBlock {
+  flex: 1 1 auto;
 }
 
 h1, h2, p {
@@ -173,6 +188,10 @@ a {
   .sectionHeader {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .brand img {
+    max-width: 100%;
   }
 
   .filters,
