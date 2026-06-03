@@ -150,7 +150,7 @@ input {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 860px;
+  min-width: 980px;
 }
 
 th,
@@ -179,6 +179,23 @@ a {
   padding: 4px 8px;
   background: #f5ead0;
   color: #65450f;
+  font-weight: 700;
+}
+
+.pointTime {
+  font-weight: 700;
+}
+
+.pointLinks {
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.offline {
+  color: #9a3412;
   font-weight: 700;
 }
 
