@@ -456,12 +456,9 @@ function submitAdjustment(event) {
     adjustStatus.textContent = 'Inclua pelo menos um ponto ajustado.';
     return;
   }
-  const password = prompt('Digite a senha para solicitar ajuste:');
-  if (!password) return;
   const row = currentRows.find((item) => item.date === adjustDateInput.value && String(item.operator_id) === String(adjustOperatorInput.value.trim()));
   const params = new URLSearchParams();
   params.set('action', 'request_adjustment');
-  params.set('password', password);
   params.set('operator_id', adjustOperatorInput.value.trim());
   params.set('collaborator_name', adjustNameInput.value.trim());
   params.set('date', adjustDateInput.value);
