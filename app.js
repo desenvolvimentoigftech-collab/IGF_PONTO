@@ -47,9 +47,9 @@ function loadRecords() {
     .then((data) => {
       const rows = normalizeDailyRows(data.daily_rows || []);
       const filteredRows = statusInput.value ? rows.filter((row) => row.status === statusInput.value) : rows;
-      return resolveVisibleBank(filteredRows, data.bank || null).then((bank) => {
-        render(filteredRows, data.truncated, bank);
-        renderGeneralBank(bank);
+      return resolveVisibleBanks(filteredRows, data.bank || null).then((banksByOperator) => {
+        render(filteredRows, data.truncated, banksByOperator);
+        renderGeneralBank(displayBankForRows(filteredRows, banksByOperator));
         statusText.textContent = `Atualizado em ${new Date().toLocaleTimeString('pt-BR')}${data.truncated ? ' - limite atingido' : ''}`;
       });
     })
@@ -142,15 +142,23 @@ function jsonp(url) {
   });
 }
 
-function resolveVisibleBank(rows, bank) {
-  if (bank) return Promise.resolve(bank);
+function resolveVisibleBanks(rows, bank) {
+  const banks = {};
+  if (bank && bank.operator_id) banks[String(bank.operator_id).trim()] = bank;
 
-  const operatorId = uniqueOperatorId(rows);
-  if (!operatorId) {
-    activeBankOperatorId = '';
-    return Promise.resolve(null);
-  }
+  const operatorIds = visibleOperatorIds(rows).filter((operatorId) => !banks[operatorId]);
+  if (!operatorIds.length) return Promise.resolve(banks);
 
+  return Promise.all(operatorIds.map((operatorId) => fetchBank(operatorId)))
+    .then((bankResults) => {
+      bankResults.forEach((item) => {
+        if (item && item.operator_id) banks[String(item.operator_id).trim()] = item;
+      });
+      return banks;
+    });
+}
+
+function fetchBank(operatorId) {
   const params = new URLSearchParams();
   params.set('action', 'bank');
   params.set('operator_id', operatorId);
@@ -159,11 +167,15 @@ function resolveVisibleBank(rows, bank) {
     .catch(() => null);
 }
 
-function uniqueOperatorId(rows) {
-  const ids = Array.from(new Set(rows
+function visibleOperatorIds(rows) {
+  return Array.from(new Set(rows
     .map((row) => String(row.operator_id || '').trim())
     .filter(Boolean)));
-  return ids.length === 1 ? ids[0] : '';
+}
+
+function displayBankForRows(rows, banksByOperator) {
+  const ids = visibleOperatorIds(rows);
+  return ids.length === 1 ? banksByOperator[ids[0]] || null : null;
 }
 
 function normalizeDailyRows(rows) {
@@ -176,8 +188,8 @@ function normalizeDailyRows(rows) {
     .sort((a, b) => a.dateObj - b.dateObj || String(a.operator_id).localeCompare(String(b.operator_id), 'pt-BR', { numeric: true }));
 }
 
-function render(rows, truncated, bank) {
-  const rowsWithAccumulated = withAccumulatedBalance(rows, bank);
+function render(rows, truncated, banksByOperator) {
+  const rowsWithAccumulated = withAccumulatedBalance(rows, banksByOperator);
   const summary = rows.reduce((acc, row) => {
     acc.expected += Number(row.expected_minutes || 0);
     acc.worked += Number(row.worked_minutes || 0);
@@ -198,17 +210,19 @@ function render(rows, truncated, bank) {
     : '<tr><td colspan="13">Nenhum registro encontrado.</td></tr>';
 }
 
-function withAccumulatedBalance(rows, bank) {
-  if (!bank || !bank.operator_id) {
-    return rows.map((row) => ({ ...row, accumulated_balance_minutes: null }));
-  }
+function withAccumulatedBalance(rows, banksByOperator) {
+  const runningByOperator = {};
+  Object.keys(banksByOperator || {}).forEach((operatorId) => {
+    runningByOperator[operatorId] = Number(banksByOperator[operatorId].balance_minutes || 0);
+  });
 
-  let running = Number(bank.balance_minutes || 0);
-  const output = new Array(rows.length);
+  const output = rows.map((row) => ({ ...row, accumulated_balance_minutes: null }));
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index];
-    output[index] = { ...row, accumulated_balance_minutes: running };
-    running -= Number(row.balance_minutes || 0);
+    const operatorId = String(row.operator_id || '').trim();
+    if (!Object.prototype.hasOwnProperty.call(runningByOperator, operatorId)) continue;
+    output[index].accumulated_balance_minutes = runningByOperator[operatorId];
+    runningByOperator[operatorId] -= Number(row.balance_minutes || 0);
   }
   return output;
 }
