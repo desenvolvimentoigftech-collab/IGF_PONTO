@@ -185,7 +185,7 @@ function normalizeDailyRows(rows) {
       dateObj: parseDate(row.date)
     }))
     .filter((row) => row.dateObj)
-    .sort((a, b) => a.dateObj - b.dateObj || String(a.operator_id).localeCompare(String(b.operator_id), 'pt-BR', { numeric: true }));
+    .sort((a, b) => b.dateObj - a.dateObj || String(a.operator_id).localeCompare(String(b.operator_id), 'pt-BR', { numeric: true }));
 }
 
 function render(rows, truncated, banksByOperator) {
@@ -217,7 +217,7 @@ function withAccumulatedBalance(rows, banksByOperator) {
   });
 
   const output = rows.map((row) => ({ ...row, accumulated_balance_minutes: null }));
-  for (let index = rows.length - 1; index >= 0; index -= 1) {
+  for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     const operatorId = String(row.operator_id || '').trim();
     if (!Object.prototype.hasOwnProperty.call(runningByOperator, operatorId)) continue;
