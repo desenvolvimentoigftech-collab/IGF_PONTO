@@ -62,6 +62,10 @@
           <strong id="hourBank">00:00</strong>
         </article>
         <article class="metric">
+          <span>Banco geral</span>
+          <strong id="generalHourBank">--</strong>
+        </article>
+        <article class="metric">
           <span>Inconsistencias</span>
           <strong id="inconsistencyCount">0</strong>
         </article>
@@ -70,7 +74,10 @@
       <section class="panel">
         <div class="sectionHeader">
           <h2>Banco de horas</h2>
-          <span id="statusText">Pronto</span>
+          <div class="headerActions">
+            <button id="resetBankButton" type="button" disabled>Zerar banco</button>
+            <span id="statusText">Pronto</span>
+          </div>
         </div>
         <div class="tableWrap">
           <table>
@@ -95,6 +102,17 @@
         </div>
       </section>
     </main>
+
+    <div id="resetModal" class="modalBackdrop" hidden>
+      <div class="modal">
+        <h2>Zerar banco</h2>
+        <p id="resetModalText">Esta operacao cria uma zeragem auditavel para o operador selecionado.</p>
+        <div class="modalActions">
+          <button id="confirmResetBankButton" type="button">ZERAR BANCO</button>
+          <button id="cancelResetBankButton" type="button" class="secondaryButton">CANCELAR OPERACAO</button>
+        </div>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>

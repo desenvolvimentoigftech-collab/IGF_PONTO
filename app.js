@@ -10,8 +10,14 @@ const totalDays = document.querySelector('#totalDays');
 const expectedHours = document.querySelector('#expectedHours');
 const workedHours = document.querySelector('#workedHours');
 const hourBank = document.querySelector('#hourBank');
+const generalHourBank = document.querySelector('#generalHourBank');
 const inconsistencyCount = document.querySelector('#inconsistencyCount');
 const statusText = document.querySelector('#statusText');
+const resetBankButton = document.querySelector('#resetBankButton');
+const resetModal = document.querySelector('#resetModal');
+const resetModalText = document.querySelector('#resetModalText');
+const confirmResetBankButton = document.querySelector('#confirmResetBankButton');
+const cancelResetBankButton = document.querySelector('#cancelResetBankButton');
 
 const today = new Date();
 fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -21,6 +27,9 @@ refreshButton.addEventListener('click', loadRecords);
 [operatorInput, fromInput, toInput, statusInput].forEach((input) => {
   input.addEventListener('change', loadRecords);
 });
+resetBankButton.addEventListener('click', beginResetBank);
+confirmResetBankButton.addEventListener('click', confirmResetBank);
+cancelResetBankButton.addEventListener('click', closeResetModal);
 
 loadRecords();
 
@@ -38,7 +47,68 @@ function loadRecords() {
       const rows = normalizeDailyRows(data.daily_rows || []);
       const filteredRows = statusInput.value ? rows.filter((row) => row.status === statusInput.value) : rows;
       render(filteredRows, data.truncated);
+      renderGeneralBank(data.bank || null);
       statusText.textContent = `Atualizado em ${new Date().toLocaleTimeString('pt-BR')}${data.truncated ? ' - limite atingido' : ''}`;
+    })
+    .catch((error) => {
+      statusText.textContent = `Erro: ${error.message}`;
+    });
+}
+
+function renderGeneralBank(bank) {
+  if (!operatorInput.value.trim() || !bank) {
+    generalHourBank.textContent = '--';
+    generalHourBank.className = '';
+    resetBankButton.disabled = true;
+    return;
+  }
+
+  generalHourBank.textContent = formatSignedMinutes(bank.balance_minutes || 0);
+  generalHourBank.className = Number(bank.balance_minutes || 0) < 0 ? 'negative' : Number(bank.balance_minutes || 0) > 0 ? 'positive' : '';
+  resetBankButton.disabled = false;
+}
+
+function beginResetBank() {
+  const operatorId = operatorInput.value.trim();
+  if (!operatorId) {
+    alert('Selecione um operador antes de zerar o banco.');
+    return;
+  }
+
+  const password = prompt('Digite a senha para zerar o banco:');
+  if (!password) return;
+
+  resetBankButton.dataset.password = password;
+  resetModalText.textContent = `Confirma zerar o banco geral do operador ${operatorId}? Esta operacao ficara registrada na planilha.`;
+  resetModal.hidden = false;
+}
+
+function closeResetModal() {
+  resetBankButton.dataset.password = '';
+  resetModal.hidden = true;
+}
+
+function confirmResetBank() {
+  const operatorId = operatorInput.value.trim();
+  const password = resetBankButton.dataset.password || '';
+  if (!operatorId || !password) {
+    closeResetModal();
+    return;
+  }
+
+  statusText.textContent = 'Zerando banco...';
+  const params = new URLSearchParams();
+  params.set('action', 'reset_bank');
+  params.set('operator_id', operatorId);
+  params.set('password', password);
+  params.set('confirmation', 'ZERAR BANCO');
+
+  closeResetModal();
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      if (!data.ok) throw new Error(data.error || 'Falha ao zerar banco');
+      statusText.textContent = 'Banco zerado.';
+      loadRecords();
     })
     .catch((error) => {
       statusText.textContent = `Erro: ${error.message}`;
