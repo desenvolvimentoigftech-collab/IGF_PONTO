@@ -64,12 +64,14 @@ function renderGeneralBank(bank) {
     generalHourBank.textContent = '--';
     generalHourBank.className = '';
     resetBankButton.disabled = true;
+    resetBankButton.title = 'Informe um operador ou filtre a tabela para um unico operador';
     return;
   }
 
   generalHourBank.textContent = formatSignedMinutes(bank.balance_minutes || 0);
   generalHourBank.className = Number(bank.balance_minutes || 0) < 0 ? 'negative' : Number(bank.balance_minutes || 0) > 0 ? 'positive' : '';
   resetBankButton.disabled = false;
+  resetBankButton.title = `Zerar banco do operador ${activeBankOperatorId}`;
 }
 
 function beginResetBank() {
@@ -174,6 +176,9 @@ function visibleOperatorIds(rows) {
 }
 
 function displayBankForRows(rows, banksByOperator) {
+  const typedOperatorId = operatorInput.value.trim();
+  if (typedOperatorId && banksByOperator[typedOperatorId]) return banksByOperator[typedOperatorId];
+
   const ids = visibleOperatorIds(rows);
   return ids.length === 1 ? banksByOperator[ids[0]] || null : null;
 }
