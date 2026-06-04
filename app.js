@@ -46,7 +46,7 @@ function loadRecords() {
     .then((data) => {
       const rows = normalizeDailyRows(data.daily_rows || []);
       const filteredRows = statusInput.value ? rows.filter((row) => row.status === statusInput.value) : rows;
-      render(filteredRows, data.truncated);
+      render(filteredRows, data.truncated, data.bank || null);
       renderGeneralBank(data.bank || null);
       statusText.textContent = `Atualizado em ${new Date().toLocaleTimeString('pt-BR')}${data.truncated ? ' - limite atingido' : ''}`;
     })
@@ -148,7 +148,8 @@ function normalizeDailyRows(rows) {
     .sort((a, b) => a.dateObj - b.dateObj || String(a.operator_id).localeCompare(String(b.operator_id), 'pt-BR', { numeric: true }));
 }
 
-function render(rows) {
+function render(rows, truncated, bank) {
+  const rowsWithAccumulated = withAccumulatedBalance(rows, bank);
   const summary = rows.reduce((acc, row) => {
     acc.expected += Number(row.expected_minutes || 0);
     acc.worked += Number(row.worked_minutes || 0);
@@ -164,9 +165,24 @@ function render(rows) {
   hourBank.className = summary.balance < 0 ? 'negative' : summary.balance > 0 ? 'positive' : '';
   inconsistencyCount.textContent = summary.inconsistencies;
 
-  recordsBody.innerHTML = rows.length
-    ? rows.map(dailyRow).join('')
-    : '<tr><td colspan="12">Nenhum registro encontrado.</td></tr>';
+  recordsBody.innerHTML = rowsWithAccumulated.length
+    ? rowsWithAccumulated.map(dailyRow).join('')
+    : '<tr><td colspan="13">Nenhum registro encontrado.</td></tr>';
+}
+
+function withAccumulatedBalance(rows, bank) {
+  if (!operatorInput.value.trim() || !bank) {
+    return rows.map((row) => ({ ...row, accumulated_balance_minutes: null }));
+  }
+
+  let running = Number(bank.balance_minutes || 0);
+  const output = new Array(rows.length);
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    output[index] = { ...row, accumulated_balance_minutes: running };
+    running -= Number(row.balance_minutes || 0);
+  }
+  return output;
 }
 
 function dailyRow(row) {
@@ -186,6 +202,7 @@ function dailyRow(row) {
       <td>${formatMinutes(row.expected_minutes || 0)}</td>
       <td>${formatMinutes(row.worked_minutes || 0)}</td>
       <td class="${Number(row.balance_minutes || 0) < 0 ? 'negative' : Number(row.balance_minutes || 0) > 0 ? 'positive' : ''}">${formatSignedMinutes(row.balance_minutes || 0)}</td>
+      <td class="${Number(row.accumulated_balance_minutes || 0) < 0 ? 'negative' : Number(row.accumulated_balance_minutes || 0) > 0 ? 'positive' : ''}">${formatOptionalSignedMinutes(row.accumulated_balance_minutes)}</td>
       <td><span class="badge ${statusClass}">${escapeHtml(row.status || 'OK')}</span></td>
       <td>${formatWarnings(row)}</td>
     </tr>
@@ -254,6 +271,11 @@ function formatSignedMinutes(minutes) {
   const value = Number(minutes || 0);
   if (!value) return '00:00';
   return `${value > 0 ? '+' : '-'}${formatMinutes(value)}`;
+}
+
+function formatOptionalSignedMinutes(minutes) {
+  if (minutes === null || minutes === undefined) return '-';
+  return formatSignedMinutes(minutes);
 }
 
 function escapeHtml(value) {
