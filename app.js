@@ -18,6 +18,7 @@ const resetModal = document.querySelector('#resetModal');
 const resetModalText = document.querySelector('#resetModalText');
 const confirmResetBankButton = document.querySelector('#confirmResetBankButton');
 const cancelResetBankButton = document.querySelector('#cancelResetBankButton');
+let activeBankOperatorId = '';
 
 const today = new Date();
 fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -46,9 +47,11 @@ function loadRecords() {
     .then((data) => {
       const rows = normalizeDailyRows(data.daily_rows || []);
       const filteredRows = statusInput.value ? rows.filter((row) => row.status === statusInput.value) : rows;
-      render(filteredRows, data.truncated, data.bank || null);
-      renderGeneralBank(data.bank || null);
-      statusText.textContent = `Atualizado em ${new Date().toLocaleTimeString('pt-BR')}${data.truncated ? ' - limite atingido' : ''}`;
+      return resolveVisibleBank(filteredRows, data.bank || null).then((bank) => {
+        render(filteredRows, data.truncated, bank);
+        renderGeneralBank(bank);
+        statusText.textContent = `Atualizado em ${new Date().toLocaleTimeString('pt-BR')}${data.truncated ? ' - limite atingido' : ''}`;
+      });
     })
     .catch((error) => {
       statusText.textContent = `Erro: ${error.message}`;
@@ -56,7 +59,8 @@ function loadRecords() {
 }
 
 function renderGeneralBank(bank) {
-  if (!operatorInput.value.trim() || !bank) {
+  activeBankOperatorId = bank && bank.operator_id ? String(bank.operator_id).trim() : '';
+  if (!activeBankOperatorId || !bank) {
     generalHourBank.textContent = '--';
     generalHourBank.className = '';
     resetBankButton.disabled = true;
@@ -69,7 +73,7 @@ function renderGeneralBank(bank) {
 }
 
 function beginResetBank() {
-  const operatorId = operatorInput.value.trim();
+  const operatorId = activeBankOperatorId || operatorInput.value.trim();
   if (!operatorId) {
     alert('Selecione um operador antes de zerar o banco.');
     return;
@@ -89,7 +93,7 @@ function closeResetModal() {
 }
 
 function confirmResetBank() {
-  const operatorId = operatorInput.value.trim();
+  const operatorId = activeBankOperatorId || operatorInput.value.trim();
   const password = resetBankButton.dataset.password || '';
   if (!operatorId || !password) {
     closeResetModal();
@@ -138,6 +142,30 @@ function jsonp(url) {
   });
 }
 
+function resolveVisibleBank(rows, bank) {
+  if (bank) return Promise.resolve(bank);
+
+  const operatorId = uniqueOperatorId(rows);
+  if (!operatorId) {
+    activeBankOperatorId = '';
+    return Promise.resolve(null);
+  }
+
+  const params = new URLSearchParams();
+  params.set('action', 'bank');
+  params.set('operator_id', operatorId);
+  return jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => (data && data.ok ? data.bank : null))
+    .catch(() => null);
+}
+
+function uniqueOperatorId(rows) {
+  const ids = Array.from(new Set(rows
+    .map((row) => String(row.operator_id || '').trim())
+    .filter(Boolean)));
+  return ids.length === 1 ? ids[0] : '';
+}
+
 function normalizeDailyRows(rows) {
   return rows
     .map((row) => ({
@@ -171,7 +199,7 @@ function render(rows, truncated, bank) {
 }
 
 function withAccumulatedBalance(rows, bank) {
-  if (!operatorInput.value.trim() || !bank) {
+  if (!bank || !bank.operator_id) {
     return rows.map((row) => ({ ...row, accumulated_balance_minutes: null }));
   }
 
