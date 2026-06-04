@@ -322,7 +322,10 @@ function formatWarnings(row) {
   const warnings = row.warnings || [];
   const extras = row.extras || [];
   if (!warnings.length && !extras.length && !(row.adjustments || []).length) return '-';
-  const items = warnings.map(labelWarning);
+  const hasDetailedAdjustments = (row.adjustments || []).length > 0;
+  const items = warnings
+    .filter((warning) => !hasDetailedAdjustments || !['ajuste_pendente', 'ajuste_aprovado', 'ajuste_recusado'].includes(warning))
+    .map(labelWarning);
   extras.forEach((point) => items.push(`Extra ${point.event || 'Ponto'} ${point.time || ''}`));
   (row.adjustments || []).forEach((adjustment) => {
     const status = adjustment.status === 'APROVADO' ? 'Ajuste aprovado' : adjustment.status === 'RECUSADO' ? 'Ajuste recusado' : 'Ajuste pendente';
@@ -400,9 +403,16 @@ function addAdjustmentPoint() {
     adjustStatus.textContent = 'Informe o horario do ponto.';
     return;
   }
-  adjustmentPoints.push({ event, time });
-  adjustmentPoints.sort((a, b) => timeToSortable(a.time) - timeToSortable(b.time));
+  const nextPoints = adjustmentPoints.concat({ event, time }).sort((a, b) => timeToSortable(a.time) - timeToSortable(b.time));
+  const validation = validateAdjustmentSequence(nextPoints);
+  if (!validation.ok) {
+    adjustStatus.textContent = validation.error;
+    return;
+  }
+  adjustmentPoints = nextPoints;
   adjustPointTimeInput.value = '';
+  adjustPointEventInput.value = adjustmentPoints.length % 2 === 0 ? 'Entrada' : 'Saida';
+  adjustStatus.textContent = '';
   renderAdjustmentPoints();
 }
 
@@ -436,6 +446,21 @@ function pointsSummary(points) {
   return (points || []).map((point, index) => `${index + 1}. ${point.event} ${point.time}`).join(' | ');
 }
 
+function validateAdjustmentSequence(points) {
+  const sorted = (points || []).slice().sort((a, b) => timeToSortable(a.time) - timeToSortable(b.time));
+  const usedTimes = {};
+  for (let index = 0; index < sorted.length; index += 1) {
+    const point = sorted[index];
+    const expectedEvent = index % 2 === 0 ? 'Entrada' : 'Saida';
+    if (usedTimes[point.time]) return { ok: false, error: 'Ja existe um ponto nesse horario.' };
+    if (point.event !== expectedEvent) {
+      return { ok: false, error: `A sequencia deve alternar Entrada e Saida. O ponto ${index + 1} deve ser ${expectedEvent}.` };
+    }
+    usedTimes[point.time] = true;
+  }
+  return { ok: true };
+}
+
 function originalDaySummary(row) {
   if (!row) return '';
   return ['entrada1', 'saida1', 'entrada2', 'saida2']
@@ -454,6 +479,11 @@ function submitAdjustment(event) {
   event.preventDefault();
   if (!adjustmentPoints.length) {
     adjustStatus.textContent = 'Inclua pelo menos um ponto ajustado.';
+    return;
+  }
+  const validation = validateAdjustmentSequence(adjustmentPoints);
+  if (!validation.ok) {
+    adjustStatus.textContent = validation.error;
     return;
   }
   const row = currentRows.find((item) => item.date === adjustDateInput.value && String(item.operator_id) === String(adjustOperatorInput.value.trim()));
