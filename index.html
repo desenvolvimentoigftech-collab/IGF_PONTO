@@ -14,7 +14,7 @@
         </div>
         <div class="titleBlock">
           <h1>Registro de Ponto IGF</h1>
-          <p>Historico, fotos, localizacao e banco de horas.</p>
+          <p>Historico, banco de horas, fotos, localizacao e inconsistencias.</p>
         </div>
         <button id="refreshButton" type="button">Atualizar</button>
       </header>
@@ -36,26 +36,44 @@
           Ate
           <input id="toInput" type="date">
         </label>
+        <label>
+          Status
+          <select id="statusInput">
+            <option value="">Todos</option>
+            <option value="ATENCAO">Atencao</option>
+            <option value="DEVENDO">Devendo</option>
+            <option value="CREDITO">Credito</option>
+            <option value="OK">OK</option>
+          </select>
+        </label>
       </section>
 
       <section class="metrics">
         <article class="metric">
-          <span>Total de registros</span>
-          <strong id="totalRecords">0</strong>
+          <span>Dias</span>
+          <strong id="totalDays">0</strong>
         </article>
         <article class="metric">
-          <span>Banco de horas</span>
+          <span>Previsto</span>
+          <strong id="expectedHours">00:00</strong>
+        </article>
+        <article class="metric">
+          <span>Trabalhado</span>
+          <strong id="workedHours">00:00</strong>
+        </article>
+        <article class="metric">
+          <span>Banco</span>
           <strong id="hourBank">00:00</strong>
         </article>
         <article class="metric">
-          <span>Pendencias/offline</span>
-          <strong id="offlineRecords">0</strong>
+          <span>Inconsistencias</span>
+          <strong id="inconsistencyCount">0</strong>
         </article>
       </section>
 
       <section class="panel">
         <div class="sectionHeader">
-          <h2>Pontos do dia</h2>
+          <h2>Banco de horas</h2>
           <span id="statusText">Pronto</span>
         </div>
         <div class="tableWrap">
@@ -69,7 +87,11 @@
                 <th>Saida 1</th>
                 <th>Entrada 2</th>
                 <th>Saida 2</th>
-                <th>Extras</th>
+                <th>Previsto</th>
+                <th>Trabalhado</th>
+                <th>Saldo</th>
+                <th>Status</th>
+                <th>Ocorrencias</th>
               </tr>
             </thead>
             <tbody id="recordsBody"></tbody>

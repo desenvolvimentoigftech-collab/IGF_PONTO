@@ -4,20 +4,23 @@ const scriptUrlInput = document.querySelector('#scriptUrlInput');
 const operatorInput = document.querySelector('#operatorInput');
 const fromInput = document.querySelector('#fromInput');
 const toInput = document.querySelector('#toInput');
+const statusInput = document.querySelector('#statusInput');
 const refreshButton = document.querySelector('#refreshButton');
 const recordsBody = document.querySelector('#recordsBody');
-const totalRecords = document.querySelector('#totalRecords');
+const totalDays = document.querySelector('#totalDays');
+const expectedHours = document.querySelector('#expectedHours');
+const workedHours = document.querySelector('#workedHours');
 const hourBank = document.querySelector('#hourBank');
-const offlineRecords = document.querySelector('#offlineRecords');
+const inconsistencyCount = document.querySelector('#inconsistencyCount');
 const statusText = document.querySelector('#statusText');
 
 scriptUrlInput.value = localStorage.getItem('scriptUrl') || DEFAULT_SCRIPT_URL;
-const today = new Date().toISOString().slice(0, 10);
-fromInput.value = today;
-toInput.value = today;
+const today = new Date();
+fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+toInput.value = today.toISOString().slice(0, 10);
 
 refreshButton.addEventListener('click', loadRecords);
-[scriptUrlInput, operatorInput, fromInput, toInput].forEach((input) => {
+[scriptUrlInput, operatorInput, fromInput, toInput, statusInput].forEach((input) => {
   input.addEventListener('change', loadRecords);
 });
 
@@ -38,9 +41,10 @@ function loadRecords() {
 
   jsonp(`${scriptUrl}?${params.toString()}`)
     .then((data) => {
-      const records = normalizeRecords(data.records || []);
-      render(records);
-      statusText.textContent = `Atualizado em ${new Date().toLocaleTimeString('pt-BR')}`;
+      const rows = normalizeDailyRows(data.daily_rows || []);
+      const filteredRows = statusInput.value ? rows.filter((row) => row.status === statusInput.value) : rows;
+      render(filteredRows, data.truncated);
+      statusText.textContent = `Atualizado em ${new Date().toLocaleTimeString('pt-BR')}${data.truncated ? ' - limite atingido' : ''}`;
     })
     .catch((error) => {
       statusText.textContent = `Erro: ${error.message}`;
@@ -70,155 +74,104 @@ function jsonp(url) {
   });
 }
 
-function normalizeRecords(records) {
-  return records
-    .map((record) => ({
-      ...record,
-      date: parseLocalDate(record.timestamp_local)
+function normalizeDailyRows(rows) {
+  return rows
+    .map((row) => ({
+      ...row,
+      dateObj: parseDate(row.date)
     }))
-    .filter((record) => record.date)
-    .sort((a, b) => a.date - b.date);
+    .filter((row) => row.dateObj)
+    .sort((a, b) => a.dateObj - b.dateObj || String(a.operator_id).localeCompare(String(b.operator_id), 'pt-BR', { numeric: true }));
 }
 
-function render(records) {
-  totalRecords.textContent = records.length;
-  offlineRecords.textContent = records.filter((record) => record.offline_origin === 'SIM').length;
-  hourBank.textContent = formatDuration(calculateWorkedMs(records));
+function render(rows) {
+  const summary = rows.reduce((acc, row) => {
+    acc.expected += Number(row.expected_minutes || 0);
+    acc.worked += Number(row.worked_minutes || 0);
+    acc.balance += Number(row.balance_minutes || 0);
+    if ((row.warnings || []).length) acc.inconsistencies += 1;
+    return acc;
+  }, { expected: 0, worked: 0, balance: 0, inconsistencies: 0 });
 
-  const dailyRows = buildDailyRows(records);
-  recordsBody.innerHTML = dailyRows.length
-    ? dailyRows.map(dailyRow).join('')
-    : '<tr><td colspan="8">Nenhum registro encontrado.</td></tr>';
-}
+  totalDays.textContent = rows.length;
+  expectedHours.textContent = formatMinutes(summary.expected);
+  workedHours.textContent = formatMinutes(summary.worked);
+  hourBank.textContent = formatSignedMinutes(summary.balance);
+  hourBank.className = summary.balance < 0 ? 'negative' : summary.balance > 0 ? 'positive' : '';
+  inconsistencyCount.textContent = summary.inconsistencies;
 
-function buildDailyRows(records) {
-  const groups = new Map();
-  records.forEach((record) => {
-    const dateKey = formatDateKey(record.date);
-    const operatorKey = record.operator_id || 'sem_operador';
-    const key = `${dateKey}|${operatorKey}`;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        date: dateKey,
-        operator_id: record.operator_id || '-',
-        collaborator_name: record.collaborator_name || '-',
-        entrada1: null,
-        saida1: null,
-        entrada2: null,
-        saida2: null,
-        extras: []
-      });
-    }
-
-    const row = groups.get(key);
-    if ((!row.collaborator_name || row.collaborator_name === '-') && record.collaborator_name) {
-      row.collaborator_name = record.collaborator_name;
-    }
-    assignRecordToDailySlot(row, record);
-  });
-
-  return Array.from(groups.values()).sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    return String(a.operator_id).localeCompare(String(b.operator_id), 'pt-BR', { numeric: true });
-  });
-}
-
-function assignRecordToDailySlot(row, record) {
-  const event = normalizeEvent(record.event);
-  if (event === 'entrada') {
-    if (!row.entrada1) row.entrada1 = record;
-    else if (!row.entrada2) row.entrada2 = record;
-    else row.extras.push(record);
-    return;
-  }
-  if (event === 'saida') {
-    if (!row.saida1) row.saida1 = record;
-    else if (!row.saida2) row.saida2 = record;
-    else row.extras.push(record);
-    return;
-  }
-  row.extras.push(record);
+  recordsBody.innerHTML = rows.length
+    ? rows.map(dailyRow).join('')
+    : '<tr><td colspan="12">Nenhum registro encontrado.</td></tr>';
 }
 
 function dailyRow(row) {
+  const statusClass = `status-${String(row.status || 'OK').toLowerCase()}`;
   return `
-    <tr>
-      <td>${escapeHtml(formatDisplayDate(row.date))}</td>
-      <td>${escapeHtml(row.operator_id)}</td>
-      <td>${escapeHtml(row.collaborator_name)}</td>
+    <tr class="${statusClass}">
+      <td>
+        <strong>${escapeHtml(formatDisplayDate(row.date))}</strong>
+        <div class="muted">${escapeHtml(row.weekday || '')}${row.holiday ? ` / ${escapeHtml(row.holiday.name)}` : ''}</div>
+      </td>
+      <td>${escapeHtml(row.operator_id || '-')}</td>
+      <td>${escapeHtml(row.collaborator_name || '-')}</td>
       <td>${formatPointCell(row.entrada1)}</td>
       <td>${formatPointCell(row.saida1)}</td>
       <td>${formatPointCell(row.entrada2)}</td>
       <td>${formatPointCell(row.saida2)}</td>
-      <td>${formatExtrasCell(row.extras)}</td>
+      <td>${formatMinutes(row.expected_minutes || 0)}</td>
+      <td>${formatMinutes(row.worked_minutes || 0)}</td>
+      <td class="${Number(row.balance_minutes || 0) < 0 ? 'negative' : Number(row.balance_minutes || 0) > 0 ? 'positive' : ''}">${formatSignedMinutes(row.balance_minutes || 0)}</td>
+      <td><span class="badge ${statusClass}">${escapeHtml(row.status || 'OK')}</span></td>
+      <td>${formatWarnings(row)}</td>
     </tr>
   `;
 }
 
-function formatPointCell(record) {
-  if (!record) return '-';
+function formatPointCell(point) {
+  if (!point) return '-';
   const links = [];
-  if (record.maps_url) links.push(`<a href="${escapeAttr(record.maps_url)}" target="_blank" rel="noopener">Mapa</a>`);
-  if (record.photo_url) links.push(`<a href="${escapeAttr(record.photo_url)}" target="_blank" rel="noopener">Foto</a>`);
-  const offline = record.offline_origin === 'SIM' ? '<span class="offline">Offline</span>' : '';
+  if (point.maps_url) links.push(`<a href="${escapeAttr(point.maps_url)}" target="_blank" rel="noopener">Mapa</a>`);
+  if (point.photo_url) links.push(`<a href="${escapeAttr(point.photo_url)}" target="_blank" rel="noopener">Foto</a>`);
+  const flags = [];
+  if (point.offline) flags.push('Offline');
+  if (point.location_status === 'fora') flags.push('Fora');
   return `
-    <div class="pointTime">${escapeHtml(formatTime(record.date))}</div>
-    <div class="pointLinks">${links.join(' ') || ''} ${offline}</div>
+    <div class="pointTime">${escapeHtml(point.time || '')}</div>
+    <div class="pointLinks">${links.join(' ')}</div>
+    ${flags.length ? `<div class="flags">${escapeHtml(flags.join(', '))}</div>` : ''}
   `;
 }
 
-function formatExtrasCell(records) {
-  if (!records.length) return '-';
-  return records.map((record) => {
-    const label = `${record.event || 'Ponto'} ${formatTime(record.date)}`;
-    return `<div>${escapeHtml(label)}</div>`;
-  }).join('');
+function formatWarnings(row) {
+  const warnings = row.warnings || [];
+  const extras = row.extras || [];
+  if (!warnings.length && !extras.length) return '-';
+  const items = warnings.map(labelWarning);
+  extras.forEach((point) => items.push(`Extra ${point.event || 'Ponto'} ${point.time || ''}`));
+  return items.map((item) => `<div>${escapeHtml(item)}</div>`).join('');
 }
 
-function calculateWorkedMs(records) {
-  const byOperator = new Map();
-  records.forEach((record) => {
-    const key = record.operator_id || 'sem_operador';
-    if (!byOperator.has(key)) byOperator.set(key, []);
-    byOperator.get(key).push(record);
-  });
-
-  let total = 0;
-  byOperator.forEach((items) => {
-    let openEntrada = null;
-    items.forEach((record) => {
-      if (record.event === 'Entrada') {
-        openEntrada = record.date;
-      } else if (record.event === 'Saida' && openEntrada) {
-        const diff = record.date - openEntrada;
-        if (diff > 0) total += diff;
-        openEntrada = null;
-      }
-    });
-  });
-  return total;
+function labelWarning(value) {
+  const labels = {
+    offline: 'Registro offline',
+    sem_localizacao: 'Sem localizacao',
+    sem_foto: 'Sem foto',
+    fora_do_local: 'Fora do local',
+    entrada_sem_saida: 'Entrada sem saida',
+    saida_sem_entrada: 'Saida sem entrada',
+    segunda_entrada_sem_saida: 'Segunda entrada sem saida',
+    segunda_saida_sem_entrada: 'Segunda saida sem entrada',
+    pontos_extras: 'Mais pontos no dia',
+    feriado_trabalhado: 'Feriado trabalhado'
+  };
+  return labels[value] || value;
 }
 
-function parseLocalDate(value) {
-  if (!value) return null;
-  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+function parseDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
-  const [, year, month, day, hour, minute, second] = match.map(Number);
-  return new Date(year, month - 1, day, hour, minute, second);
-}
-
-function normalizeEvent(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
-function formatDateKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
 function formatDisplayDate(value) {
@@ -226,15 +179,17 @@ function formatDisplayDate(value) {
   return `${day}/${month}/${year}`;
 }
 
-function formatTime(date) {
-  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+function formatMinutes(minutes) {
+  const value = Math.abs(Number(minutes || 0));
+  const hours = Math.floor(value / 60);
+  const mins = value % 60;
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
 }
 
-function formatDuration(ms) {
-  const totalMinutes = Math.floor(ms / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+function formatSignedMinutes(minutes) {
+  const value = Number(minutes || 0);
+  if (!value) return '00:00';
+  return `${value > 0 ? '+' : '-'}${formatMinutes(value)}`;
 }
 
 function escapeHtml(value) {
