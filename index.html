@@ -19,6 +19,12 @@
         <button id="refreshButton" type="button">Atualizar</button>
       </header>
 
+      <nav class="tabs">
+        <button class="tabButton active" type="button" data-tab="historyPanel">Historico</button>
+        <button class="tabButton" type="button" data-tab="punchPanel">Bater ponto</button>
+        <button class="tabButton" type="button" data-tab="adjustPanel">Ajuste de ponto</button>
+      </nav>
+
       <section class="panel filters">
         <label>
           Operador
@@ -71,7 +77,7 @@
         </article>
       </section>
 
-      <section class="panel">
+      <section id="historyPanel" class="tabPanel panel">
         <div class="sectionHeader">
           <h2>Banco de horas</h2>
           <div class="headerActions">
@@ -96,12 +102,91 @@
                 <th>Saldo acumulado</th>
                 <th>Status</th>
                 <th>Ocorrencias</th>
+                <th>Acoes</th>
               </tr>
             </thead>
             <tbody id="recordsBody"></tbody>
           </table>
         </div>
       </section>
+
+      <section id="punchPanel" class="tabPanel panel" hidden>
+        <div class="sectionHeader">
+          <h2>Bater ponto</h2>
+          <span id="punchStatus" class="muted">Pronto</span>
+        </div>
+        <form id="punchForm" class="formGrid">
+          <label>
+            Operador
+            <input id="punchOperatorInput" list="knownOperators" type="text" inputmode="numeric" required>
+          </label>
+          <label>
+            Nome
+            <input id="punchNameInput" type="text" required>
+          </label>
+          <label>
+            Evento
+            <select id="punchEventInput" required>
+              <option value="Entrada">Entrada</option>
+              <option value="Saida">Saida</option>
+            </select>
+          </label>
+          <label>
+            Foto
+            <input id="punchPhotoInput" type="file" accept="image/*" capture="user" required>
+          </label>
+          <div class="formActions">
+            <button type="submit">Registrar ponto</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="adjustPanel" class="tabPanel panel" hidden>
+        <div class="sectionHeader">
+          <h2>Ajuste de ponto</h2>
+          <span id="adjustStatus" class="muted">Pronto</span>
+        </div>
+        <form id="adjustForm" class="formGrid">
+          <label>
+            Operador
+            <input id="adjustOperatorInput" list="knownOperators" type="text" inputmode="numeric" required>
+          </label>
+          <label>
+            Nome
+            <input id="adjustNameInput" type="text">
+          </label>
+          <label>
+            Data
+            <input id="adjustDateInput" type="date" required>
+          </label>
+          <label>
+            Ponto
+            <select id="adjustSlotInput" required>
+              <option value="entrada1">Entrada 1</option>
+              <option value="saida1">Saida 1</option>
+              <option value="entrada2">Entrada 2</option>
+              <option value="saida2">Saida 2</option>
+            </select>
+          </label>
+          <label>
+            Horario correto
+            <input id="adjustTimeInput" type="time" required>
+          </label>
+          <label>
+            Motivo
+            <input id="adjustReasonInput" type="text" required>
+          </label>
+          <label>
+            Solicitante
+            <input id="adjustRequesterInput" type="text">
+          </label>
+          <div class="formActions">
+            <button type="submit">Enviar ajuste</button>
+          </div>
+        </form>
+      </section>
+
+      <datalist id="knownOperators"></datalist>
     </main>
 
     <div id="resetModal" class="modalBackdrop" hidden>
@@ -115,6 +200,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=20260604-7"></script>
+    <script src="app.js?v=20260604-8"></script>
   </body>
 </html>

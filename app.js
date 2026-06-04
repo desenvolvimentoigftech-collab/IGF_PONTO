@@ -18,7 +18,27 @@ const resetModal = document.querySelector('#resetModal');
 const resetModalText = document.querySelector('#resetModalText');
 const confirmResetBankButton = document.querySelector('#confirmResetBankButton');
 const cancelResetBankButton = document.querySelector('#cancelResetBankButton');
+const tabButtons = Array.from(document.querySelectorAll('.tabButton'));
+const tabPanels = Array.from(document.querySelectorAll('.tabPanel'));
+const knownOperators = document.querySelector('#knownOperators');
+const punchForm = document.querySelector('#punchForm');
+const punchOperatorInput = document.querySelector('#punchOperatorInput');
+const punchNameInput = document.querySelector('#punchNameInput');
+const punchEventInput = document.querySelector('#punchEventInput');
+const punchPhotoInput = document.querySelector('#punchPhotoInput');
+const punchStatus = document.querySelector('#punchStatus');
+const adjustForm = document.querySelector('#adjustForm');
+const adjustOperatorInput = document.querySelector('#adjustOperatorInput');
+const adjustNameInput = document.querySelector('#adjustNameInput');
+const adjustDateInput = document.querySelector('#adjustDateInput');
+const adjustSlotInput = document.querySelector('#adjustSlotInput');
+const adjustTimeInput = document.querySelector('#adjustTimeInput');
+const adjustReasonInput = document.querySelector('#adjustReasonInput');
+const adjustRequesterInput = document.querySelector('#adjustRequesterInput');
+const adjustStatus = document.querySelector('#adjustStatus');
 let activeBankOperatorId = '';
+let currentRows = [];
+let operatorNames = {};
 
 const today = new Date();
 fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -31,6 +51,13 @@ refreshButton.addEventListener('click', loadRecords);
 resetBankButton.addEventListener('click', beginResetBank);
 confirmResetBankButton.addEventListener('click', confirmResetBank);
 cancelResetBankButton.addEventListener('click', closeResetModal);
+tabButtons.forEach((button) => button.addEventListener('click', () => activateTab(button.dataset.tab)));
+punchForm.addEventListener('submit', submitPunch);
+adjustForm.addEventListener('submit', submitAdjustment);
+[punchOperatorInput, adjustOperatorInput].forEach((input) => {
+  input.addEventListener('change', () => fillKnownOperatorName(input));
+});
+recordsBody.addEventListener('click', handleRecordAction);
 
 loadRecords();
 
@@ -47,6 +74,8 @@ function loadRecords() {
     .then((data) => {
       const rows = normalizeDailyRows(data.daily_rows || []);
       const filteredRows = statusInput.value ? rows.filter((row) => row.status === statusInput.value) : rows;
+      currentRows = filteredRows;
+      updateKnownOperators(rows);
       return resolveVisibleBanks(filteredRows, data.bank || null).then((banksByOperator) => {
         render(filteredRows, data.truncated, banksByOperator);
         renderGeneralBank(displayBankForRows(filteredRows, banksByOperator));
@@ -56,6 +85,11 @@ function loadRecords() {
     .catch((error) => {
       statusText.textContent = `Erro: ${error.message}`;
     });
+}
+
+function activateTab(tabId) {
+  tabButtons.forEach((button) => button.classList.toggle('active', button.dataset.tab === tabId));
+  tabPanels.forEach((panel) => { panel.hidden = panel.id !== tabId; });
 }
 
 function renderGeneralBank(bank) {
@@ -204,7 +238,7 @@ function render(rows, truncated, banksByOperator) {
 
   recordsBody.innerHTML = rowsWithAccumulated.length
     ? rowsWithAccumulated.map(dailyRow).join('')
-    : '<tr><td colspan="13">Nenhum registro encontrado.</td></tr>';
+    : '<tr><td colspan="14">Nenhum registro encontrado.</td></tr>';
 }
 
 function withAccumulatedBalance(rows, banksByOperator) {
@@ -231,8 +265,10 @@ function withAccumulatedBalance(rows, banksByOperator) {
 
 function dailyRow(row) {
   const statusClass = `status-${String(row.status || 'OK').toLowerCase()}`;
+  const adjustedClass = row.adjustment_status ? ' adjusted-row' : '';
+  const pendingAdjustments = (row.adjustments || []).filter((item) => item.status === 'PENDENTE');
   return `
-    <tr class="${statusClass}">
+    <tr class="${statusClass}${adjustedClass}">
       <td>
         <strong>${escapeHtml(formatDisplayDate(row.date))}</strong>
         <div class="muted">${escapeHtml(row.weekday || '')}${row.holiday ? ` / ${escapeHtml(row.holiday.name)}` : ''}</div>
@@ -249,6 +285,10 @@ function dailyRow(row) {
       <td class="${Number(row.accumulated_balance_minutes || 0) < 0 ? 'negative' : Number(row.accumulated_balance_minutes || 0) > 0 ? 'positive' : ''}">${formatOptionalSignedMinutes(row.accumulated_balance_minutes)}</td>
       <td><span class="badge ${statusClass}">${escapeHtml(row.status || 'OK')}</span></td>
       <td>${formatWarnings(row)}</td>
+      <td>
+        <button type="button" class="smallButton" data-action="edit-point" data-row-key="${escapeAttr(rowKey(row))}">Editar ponto</button>
+        ${pendingAdjustments.map((item) => `<button type="button" class="smallButton approveButton" data-action="approve-adjustment" data-adjustment-id="${escapeAttr(item.id)}">Aprovar</button>`).join('')}
+      </td>
     </tr>
   `;
 }
@@ -261,6 +301,7 @@ function formatPointCell(point) {
   const flags = [];
   if (point.offline) flags.push('Offline');
   if (point.location_status === 'fora') flags.push('Fora');
+  if (point.manual_adjustment) flags.push('Ajuste');
   return `
     <div class="pointTime">${escapeHtml(point.time || '')}</div>
     <div class="pointLinks">${links.join(' ')}</div>
@@ -274,6 +315,9 @@ function formatWarnings(row) {
   if (!warnings.length && !extras.length) return '-';
   const items = warnings.map(labelWarning);
   extras.forEach((point) => items.push(`Extra ${point.event || 'Ponto'} ${point.time || ''}`));
+  (row.adjustments || []).forEach((adjustment) => {
+    items.push(`${adjustment.status === 'APROVADO' ? 'Ajuste aprovado' : 'Ajuste pendente'}: ${slotLabel(adjustment.slot)} ${adjustment.original_time || '-'} -> ${adjustment.time}`);
+  });
   return items.map((item) => `<div>${escapeHtml(item)}</div>`).join('');
 }
 
@@ -288,9 +332,201 @@ function labelWarning(value) {
     segunda_entrada_sem_saida: 'Segunda entrada sem saida',
     segunda_saida_sem_entrada: 'Segunda saida sem entrada',
     pontos_extras: 'Mais pontos no dia',
-    feriado_trabalhado: 'Feriado trabalhado'
+    feriado_trabalhado: 'Feriado trabalhado',
+    ajuste_pendente: 'Ajuste pendente',
+    ajuste_aprovado: 'Ajuste aprovado'
   };
   return labels[value] || value;
+}
+
+function updateKnownOperators(rows) {
+  operatorNames = {};
+  rows.forEach((row) => {
+    const id = String(row.operator_id || '').trim();
+    if (id && row.collaborator_name && row.collaborator_name !== '-') operatorNames[id] = row.collaborator_name;
+  });
+  knownOperators.innerHTML = Object.keys(operatorNames)
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
+    .map((id) => `<option value="${escapeAttr(id)}">${escapeHtml(operatorNames[id])}</option>`)
+    .join('');
+}
+
+function fillKnownOperatorName(input) {
+  const name = operatorNames[input.value.trim()];
+  if (!name) return;
+  if (input === punchOperatorInput && !punchNameInput.value.trim()) punchNameInput.value = name;
+  if (input === adjustOperatorInput && !adjustNameInput.value.trim()) adjustNameInput.value = name;
+}
+
+function handleRecordAction(event) {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  if (button.dataset.action === 'edit-point') openAdjustmentForRow(button.dataset.rowKey);
+  if (button.dataset.action === 'approve-adjustment') approveAdjustment(button.dataset.adjustmentId);
+}
+
+function openAdjustmentForRow(key) {
+  const row = currentRows.find((item) => rowKey(item) === key);
+  if (!row) return;
+  adjustOperatorInput.value = row.operator_id || '';
+  adjustNameInput.value = row.collaborator_name || '';
+  adjustDateInput.value = row.date || '';
+  adjustReasonInput.value = '';
+  adjustTimeInput.value = '';
+  activateTab('adjustPanel');
+}
+
+function rowKey(row) {
+  return `${row.date}|${row.operator_id}`;
+}
+
+function slotLabel(slot) {
+  const labels = { entrada1: 'Entrada 1', saida1: 'Saida 1', entrada2: 'Entrada 2', saida2: 'Saida 2' };
+  return labels[slot] || slot;
+}
+
+function slotEvent(slot) {
+  return slot && slot.startsWith('saida') ? 'Saida' : 'Entrada';
+}
+
+function slotPoint(row, slot) {
+  return row ? row[slot] || null : null;
+}
+
+function submitAdjustment(event) {
+  event.preventDefault();
+  const password = prompt('Digite a senha para solicitar ajuste:');
+  if (!password) return;
+  const slot = adjustSlotInput.value;
+  const row = currentRows.find((item) => item.date === adjustDateInput.value && String(item.operator_id) === String(adjustOperatorInput.value.trim()));
+  const originalPoint = slotPoint(row, slot);
+  const params = new URLSearchParams();
+  params.set('action', 'request_adjustment');
+  params.set('password', password);
+  params.set('operator_id', adjustOperatorInput.value.trim());
+  params.set('collaborator_name', adjustNameInput.value.trim());
+  params.set('date', adjustDateInput.value);
+  params.set('slot', slot);
+  params.set('event', slotEvent(slot));
+  params.set('time', adjustTimeInput.value);
+  params.set('reason', adjustReasonInput.value.trim());
+  params.set('requester', adjustRequesterInput.value.trim());
+  params.set('original_time', originalPoint ? originalPoint.time || '' : '');
+
+  adjustStatus.textContent = 'Enviando ajuste...';
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      if (!data.ok) throw new Error(data.error || 'Falha ao solicitar ajuste');
+      adjustStatus.textContent = 'Ajuste enviado para aprovacao.';
+      adjustForm.reset();
+      loadRecords();
+      activateTab('historyPanel');
+    })
+    .catch((error) => {
+      adjustStatus.textContent = `Erro: ${error.message}`;
+    });
+}
+
+function approveAdjustment(adjustmentId) {
+  const password = prompt('Digite a senha para aprovar o ajuste:');
+  if (!password) return;
+  const approver = prompt('Responsavel pela aprovacao:') || 'Site';
+  const params = new URLSearchParams();
+  params.set('action', 'approve_adjustment');
+  params.set('adjustment_id', adjustmentId);
+  params.set('password', password);
+  params.set('approver', approver);
+  statusText.textContent = 'Aprovando ajuste...';
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      if (!data.ok) throw new Error(data.error || 'Falha ao aprovar ajuste');
+      statusText.textContent = 'Ajuste aprovado.';
+      loadRecords();
+    })
+    .catch((error) => {
+      statusText.textContent = `Erro: ${error.message}`;
+    });
+}
+
+function submitPunch(event) {
+  event.preventDefault();
+  punchStatus.textContent = 'Obtendo localizacao e foto...';
+  Promise.all([getCurrentPosition(), fileToBase64(punchPhotoInput.files[0])])
+    .then(([position, photo]) => {
+      const now = new Date();
+      const payload = {
+        timestamp_local: formatLocalDateTime(now),
+        timestamp_iso: now.toISOString(),
+        event: punchEventInput.value,
+        operator_id: punchOperatorInput.value.trim(),
+        collaborator_name: punchNameInput.value.trim(),
+        device_token: 'site',
+        site: 'Site',
+        offline_origin: false,
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy_m: Math.round(position.coords.accuracy || 0),
+        maps_url: `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`,
+        photo_base64: photo.base64,
+        photo_mime_type: photo.mime,
+        photo_filename: `ponto_${punchOperatorInput.value.trim()}_${Date.now()}.jpg`,
+        id: `site_${Date.now()}`
+      };
+      return postJsonNoCors(payload);
+    })
+    .then(() => {
+      punchStatus.textContent = 'Ponto enviado.';
+      punchForm.reset();
+      setTimeout(loadRecords, 1800);
+      activateTab('historyPanel');
+    })
+    .catch((error) => {
+      punchStatus.textContent = `Erro: ${error.message}`;
+    });
+}
+
+function getCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Navegador sem localizacao'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error('Localizacao obrigatoria')), {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    });
+  });
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error('Foto obrigatoria'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      resolve({ mime: file.type || 'image/jpeg', base64: value.split(',')[1] || '' });
+    };
+    reader.onerror = () => reject(new Error('Falha ao ler foto'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function postJsonNoCors(payload) {
+  return fetch(DEFAULT_SCRIPT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+}
+
+function formatLocalDateTime(date) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function parseDate(value) {
