@@ -15,7 +15,7 @@ O site ja vem apontando para a URL atual do Apps Script:
 https://script.google.com/macros/s/AKfycbxAxUus03Hx0Q6B7NIDDM1-lYn2hmcyq1flfl6DEY0HCsPa2uq6iWuYLz2XKexsNmGs/exec
 ```
 
-Se a implantacao do Apps Script mudar, altere `DEFAULT_SCRIPT_URL` em `app.js` ou preencha o campo `Apps Script URL` na tela.
+Se a implantacao do Apps Script mudar, altere `DEFAULT_SCRIPT_URL` em `app.js`.
 
 ## Banco de horas
 

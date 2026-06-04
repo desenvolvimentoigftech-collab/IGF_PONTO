@@ -1,6 +1,5 @@
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAxUus03Hx0Q6B7NIDDM1-lYn2hmcyq1flfl6DEY0HCsPa2uq6iWuYLz2XKexsNmGs/exec';
 
-const scriptUrlInput = document.querySelector('#scriptUrlInput');
 const operatorInput = document.querySelector('#operatorInput');
 const fromInput = document.querySelector('#fromInput');
 const toInput = document.querySelector('#toInput');
@@ -14,23 +13,18 @@ const hourBank = document.querySelector('#hourBank');
 const inconsistencyCount = document.querySelector('#inconsistencyCount');
 const statusText = document.querySelector('#statusText');
 
-scriptUrlInput.value = localStorage.getItem('scriptUrl') || DEFAULT_SCRIPT_URL;
 const today = new Date();
 fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
 toInput.value = today.toISOString().slice(0, 10);
 
 refreshButton.addEventListener('click', loadRecords);
-[scriptUrlInput, operatorInput, fromInput, toInput, statusInput].forEach((input) => {
+[operatorInput, fromInput, toInput, statusInput].forEach((input) => {
   input.addEventListener('change', loadRecords);
 });
 
 loadRecords();
 
 function loadRecords() {
-  const scriptUrl = scriptUrlInput.value.trim();
-  if (!scriptUrl) return;
-
-  localStorage.setItem('scriptUrl', scriptUrl);
   statusText.textContent = 'Carregando...';
 
   const params = new URLSearchParams();
@@ -39,7 +33,7 @@ function loadRecords() {
   if (fromInput.value) params.set('from', `${fromInput.value} 00:00:00`);
   if (toInput.value) params.set('to', `${toInput.value} 23:59:59`);
 
-  jsonp(`${scriptUrl}?${params.toString()}`)
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
     .then((data) => {
       const rows = normalizeDailyRows(data.daily_rows || []);
       const filteredRows = statusInput.value ? rows.filter((row) => row.status === statusInput.value) : rows;
