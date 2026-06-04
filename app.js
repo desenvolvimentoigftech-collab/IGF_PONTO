@@ -63,29 +63,23 @@ function renderGeneralBank(bank) {
   if (!activeBankOperatorId || !bank) {
     generalHourBank.textContent = '--';
     generalHourBank.className = '';
-    resetBankButton.disabled = true;
-    resetBankButton.title = 'Informe um operador ou filtre a tabela para um unico operador';
+    resetBankButton.disabled = false;
+    resetBankButton.title = 'Zerar banco de todos os trabalhadores';
     return;
   }
 
   generalHourBank.textContent = formatSignedMinutes(bank.balance_minutes || 0);
   generalHourBank.className = Number(bank.balance_minutes || 0) < 0 ? 'negative' : Number(bank.balance_minutes || 0) > 0 ? 'positive' : '';
   resetBankButton.disabled = false;
-  resetBankButton.title = `Zerar banco do operador ${activeBankOperatorId}`;
+  resetBankButton.title = 'Zerar banco de todos os trabalhadores';
 }
 
 function beginResetBank() {
-  const operatorId = activeBankOperatorId || operatorInput.value.trim();
-  if (!operatorId) {
-    alert('Selecione um operador antes de zerar o banco.');
-    return;
-  }
-
   const password = prompt('Digite a senha para zerar o banco:');
   if (!password) return;
 
   resetBankButton.dataset.password = password;
-  resetModalText.textContent = `Confirma zerar o banco geral do operador ${operatorId}? Esta operacao ficara registrada na planilha.`;
+  resetModalText.textContent = 'Confirma zerar o banco geral de todos os trabalhadores? Esta operacao ficara registrada na planilha para cada operador com saldo.';
   resetModal.hidden = false;
 }
 
@@ -95,9 +89,8 @@ function closeResetModal() {
 }
 
 function confirmResetBank() {
-  const operatorId = activeBankOperatorId || operatorInput.value.trim();
   const password = resetBankButton.dataset.password || '';
-  if (!operatorId || !password) {
+  if (!password) {
     closeResetModal();
     return;
   }
@@ -105,7 +98,6 @@ function confirmResetBank() {
   statusText.textContent = 'Zerando banco...';
   const params = new URLSearchParams();
   params.set('action', 'reset_bank');
-  params.set('operator_id', operatorId);
   params.set('password', password);
   params.set('confirmation', 'ZERAR BANCO');
 
