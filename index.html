@@ -160,18 +160,26 @@
             <input id="adjustDateInput" type="date" required>
           </label>
           <label>
-            Ponto
-            <select id="adjustSlotInput" required>
-              <option value="entrada1">Entrada 1</option>
-              <option value="saida1">Saida 1</option>
-              <option value="entrada2">Entrada 2</option>
-              <option value="saida2">Saida 2</option>
+            Tipo
+            <select id="adjustPointEventInput">
+              <option value="Entrada">Entrada</option>
+              <option value="Saida">Saida</option>
             </select>
           </label>
           <label>
-            Horario correto
-            <input id="adjustTimeInput" type="time" required>
+            Horario
+            <input id="adjustPointTimeInput" type="time">
           </label>
+          <div class="formActions">
+            <button id="addAdjustPointButton" type="button">Adicionar ponto</button>
+          </div>
+          <div class="formActions">
+            <button id="restartAdjustPointsButton" type="button" class="secondaryButton">Comecar de novo</button>
+          </div>
+          <div class="pointsEditor">
+            <strong>Pontos ajustados</strong>
+            <div id="adjustPointsList" class="pointsList">Nenhum ponto incluido.</div>
+          </div>
           <label>
             Motivo
             <input id="adjustReasonInput" type="text" required>
@@ -181,7 +189,7 @@
             <input id="adjustRequesterInput" type="text">
           </label>
           <div class="formActions">
-            <button type="submit">Enviar ajuste</button>
+            <button type="submit">Enviar dia ajustado</button>
           </div>
         </form>
       </section>
@@ -200,6 +208,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=20260604-8"></script>
+    <script src="app.js?v=20260604-9"></script>
   </body>
 </html>

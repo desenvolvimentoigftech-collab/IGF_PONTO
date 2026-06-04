@@ -31,14 +31,18 @@ const adjustForm = document.querySelector('#adjustForm');
 const adjustOperatorInput = document.querySelector('#adjustOperatorInput');
 const adjustNameInput = document.querySelector('#adjustNameInput');
 const adjustDateInput = document.querySelector('#adjustDateInput');
-const adjustSlotInput = document.querySelector('#adjustSlotInput');
-const adjustTimeInput = document.querySelector('#adjustTimeInput');
+const adjustPointEventInput = document.querySelector('#adjustPointEventInput');
+const adjustPointTimeInput = document.querySelector('#adjustPointTimeInput');
+const addAdjustPointButton = document.querySelector('#addAdjustPointButton');
+const restartAdjustPointsButton = document.querySelector('#restartAdjustPointsButton');
+const adjustPointsList = document.querySelector('#adjustPointsList');
 const adjustReasonInput = document.querySelector('#adjustReasonInput');
 const adjustRequesterInput = document.querySelector('#adjustRequesterInput');
 const adjustStatus = document.querySelector('#adjustStatus');
 let activeBankOperatorId = '';
 let currentRows = [];
 let operatorNames = {};
+let adjustmentPoints = [];
 
 const today = new Date();
 fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -54,6 +58,8 @@ cancelResetBankButton.addEventListener('click', closeResetModal);
 tabButtons.forEach((button) => button.addEventListener('click', () => activateTab(button.dataset.tab)));
 punchForm.addEventListener('submit', submitPunch);
 adjustForm.addEventListener('submit', submitAdjustment);
+addAdjustPointButton.addEventListener('click', addAdjustmentPoint);
+restartAdjustPointsButton.addEventListener('click', restartAdjustmentPoints);
 [punchOperatorInput, adjustOperatorInput].forEach((input) => {
   input.addEventListener('change', () => fillKnownOperatorName(input));
 });
@@ -265,7 +271,7 @@ function withAccumulatedBalance(rows, banksByOperator) {
 
 function dailyRow(row) {
   const statusClass = `status-${String(row.status || 'OK').toLowerCase()}`;
-  const adjustedClass = row.adjustment_status ? ' adjusted-row' : '';
+  const adjustedClass = row.adjustment_status ? ` adjusted-row adjustment-${String(row.adjustment_status).toLowerCase()}` : '';
   const pendingAdjustments = (row.adjustments || []).filter((item) => item.status === 'PENDENTE');
   return `
     <tr class="${statusClass}${adjustedClass}">
@@ -287,7 +293,10 @@ function dailyRow(row) {
       <td>${formatWarnings(row)}</td>
       <td>
         <button type="button" class="smallButton" data-action="edit-point" data-row-key="${escapeAttr(rowKey(row))}">Editar ponto</button>
-        ${pendingAdjustments.map((item) => `<button type="button" class="smallButton approveButton" data-action="approve-adjustment" data-adjustment-id="${escapeAttr(item.id)}">Aprovar</button>`).join('')}
+        ${pendingAdjustments.map((item) => `
+          <button type="button" class="smallButton approveButton" data-action="approve-adjustment" data-adjustment-id="${escapeAttr(item.id)}">Aprovar ajuste</button>
+          <button type="button" class="smallButton rejectButton" data-action="reject-adjustment" data-adjustment-id="${escapeAttr(item.id)}">Recusar</button>
+        `).join('')}
       </td>
     </tr>
   `;
@@ -312,11 +321,12 @@ function formatPointCell(point) {
 function formatWarnings(row) {
   const warnings = row.warnings || [];
   const extras = row.extras || [];
-  if (!warnings.length && !extras.length) return '-';
+  if (!warnings.length && !extras.length && !(row.adjustments || []).length) return '-';
   const items = warnings.map(labelWarning);
   extras.forEach((point) => items.push(`Extra ${point.event || 'Ponto'} ${point.time || ''}`));
   (row.adjustments || []).forEach((adjustment) => {
-    items.push(`${adjustment.status === 'APROVADO' ? 'Ajuste aprovado' : 'Ajuste pendente'}: ${slotLabel(adjustment.slot)} ${adjustment.original_time || '-'} -> ${adjustment.time}`);
+    const status = adjustment.status === 'APROVADO' ? 'Ajuste aprovado' : adjustment.status === 'RECUSADO' ? 'Ajuste recusado' : 'Ajuste pendente';
+    items.push(`${status}: ${adjustment.points_summary || pointsSummary(adjustment.points || [])}`);
   });
   return items.map((item) => `<div>${escapeHtml(item)}</div>`).join('');
 }
@@ -334,7 +344,8 @@ function labelWarning(value) {
     pontos_extras: 'Mais pontos no dia',
     feriado_trabalhado: 'Feriado trabalhado',
     ajuste_pendente: 'Ajuste pendente',
-    ajuste_aprovado: 'Ajuste aprovado'
+    ajuste_aprovado: 'Ajuste aprovado',
+    ajuste_recusado: 'Ajuste recusado'
   };
   return labels[value] || value;
 }
@@ -363,6 +374,7 @@ function handleRecordAction(event) {
   if (!button) return;
   if (button.dataset.action === 'edit-point') openAdjustmentForRow(button.dataset.rowKey);
   if (button.dataset.action === 'approve-adjustment') approveAdjustment(button.dataset.adjustmentId);
+  if (button.dataset.action === 'reject-adjustment') rejectAdjustment(button.dataset.adjustmentId);
 }
 
 function openAdjustmentForRow(key) {
@@ -372,7 +384,8 @@ function openAdjustmentForRow(key) {
   adjustNameInput.value = row.collaborator_name || '';
   adjustDateInput.value = row.date || '';
   adjustReasonInput.value = '';
-  adjustTimeInput.value = '';
+  adjustPointTimeInput.value = '';
+  restartAdjustmentPoints();
   activateTab('adjustPanel');
 }
 
@@ -380,38 +393,82 @@ function rowKey(row) {
   return `${row.date}|${row.operator_id}`;
 }
 
-function slotLabel(slot) {
-  const labels = { entrada1: 'Entrada 1', saida1: 'Saida 1', entrada2: 'Entrada 2', saida2: 'Saida 2' };
-  return labels[slot] || slot;
+function addAdjustmentPoint() {
+  const event = adjustPointEventInput.value;
+  const time = adjustPointTimeInput.value;
+  if (!time) {
+    adjustStatus.textContent = 'Informe o horario do ponto.';
+    return;
+  }
+  adjustmentPoints.push({ event, time });
+  adjustmentPoints.sort((a, b) => timeToSortable(a.time) - timeToSortable(b.time));
+  adjustPointTimeInput.value = '';
+  renderAdjustmentPoints();
 }
 
-function slotEvent(slot) {
-  return slot && slot.startsWith('saida') ? 'Saida' : 'Entrada';
+function restartAdjustmentPoints() {
+  adjustmentPoints = [];
+  renderAdjustmentPoints();
 }
 
-function slotPoint(row, slot) {
-  return row ? row[slot] || null : null;
+function renderAdjustmentPoints() {
+  if (!adjustmentPoints.length) {
+    adjustPointsList.textContent = 'Nenhum ponto incluido.';
+    return;
+  }
+  adjustPointsList.innerHTML = adjustmentPoints
+    .map((point, index) => `
+      <div class="pointDraft">
+        <span>${index + 1}. ${escapeHtml(point.event)} ${escapeHtml(point.time)}</span>
+        <button type="button" class="smallButton secondaryButton" data-remove-adjust-point="${index}">Remover</button>
+      </div>
+    `)
+    .join('');
+  adjustPointsList.querySelectorAll('[data-remove-adjust-point]').forEach((button) => {
+    button.addEventListener('click', () => {
+      adjustmentPoints.splice(Number(button.dataset.removeAdjustPoint), 1);
+      renderAdjustmentPoints();
+    });
+  });
+}
+
+function pointsSummary(points) {
+  return (points || []).map((point, index) => `${index + 1}. ${point.event} ${point.time}`).join(' | ');
+}
+
+function originalDaySummary(row) {
+  if (!row) return '';
+  return ['entrada1', 'saida1', 'entrada2', 'saida2']
+    .map((slot) => row[slot] ? `${slot}: ${row[slot].time}` : '')
+    .filter(Boolean)
+    .concat((row.extras || []).map((point) => `extra ${point.event || 'Ponto'}: ${point.time || ''}`))
+    .join(' | ');
+}
+
+function timeToSortable(time) {
+  const parts = String(time || '00:00').split(':').map(Number);
+  return (parts[0] || 0) * 60 + (parts[1] || 0);
 }
 
 function submitAdjustment(event) {
   event.preventDefault();
+  if (!adjustmentPoints.length) {
+    adjustStatus.textContent = 'Inclua pelo menos um ponto ajustado.';
+    return;
+  }
   const password = prompt('Digite a senha para solicitar ajuste:');
   if (!password) return;
-  const slot = adjustSlotInput.value;
   const row = currentRows.find((item) => item.date === adjustDateInput.value && String(item.operator_id) === String(adjustOperatorInput.value.trim()));
-  const originalPoint = slotPoint(row, slot);
   const params = new URLSearchParams();
   params.set('action', 'request_adjustment');
   params.set('password', password);
   params.set('operator_id', adjustOperatorInput.value.trim());
   params.set('collaborator_name', adjustNameInput.value.trim());
   params.set('date', adjustDateInput.value);
-  params.set('slot', slot);
-  params.set('event', slotEvent(slot));
-  params.set('time', adjustTimeInput.value);
+  params.set('points_json', JSON.stringify(adjustmentPoints));
   params.set('reason', adjustReasonInput.value.trim());
   params.set('requester', adjustRequesterInput.value.trim());
-  params.set('original_time', originalPoint ? originalPoint.time || '' : '');
+  params.set('original_summary', originalDaySummary(row));
 
   adjustStatus.textContent = 'Enviando ajuste...';
   jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
@@ -419,11 +476,35 @@ function submitAdjustment(event) {
       if (!data.ok) throw new Error(data.error || 'Falha ao solicitar ajuste');
       adjustStatus.textContent = 'Ajuste enviado para aprovacao.';
       adjustForm.reset();
+      restartAdjustmentPoints();
       loadRecords();
       activateTab('historyPanel');
     })
     .catch((error) => {
       adjustStatus.textContent = `Erro: ${error.message}`;
+    });
+}
+
+function rejectAdjustment(adjustmentId) {
+  const password = prompt('Digite a senha para recusar o ajuste:');
+  if (!password) return;
+  const rejecter = prompt('Responsavel pela recusa:') || 'Site';
+  const note = prompt('Motivo da recusa:') || '';
+  const params = new URLSearchParams();
+  params.set('action', 'reject_adjustment');
+  params.set('adjustment_id', adjustmentId);
+  params.set('password', password);
+  params.set('rejecter', rejecter);
+  params.set('note', note);
+  statusText.textContent = 'Recusando ajuste...';
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      if (!data.ok) throw new Error(data.error || 'Falha ao recusar ajuste');
+      statusText.textContent = 'Ajuste recusado.';
+      loadRecords();
+    })
+    .catch((error) => {
+      statusText.textContent = `Erro: ${error.message}`;
     });
 }
 
