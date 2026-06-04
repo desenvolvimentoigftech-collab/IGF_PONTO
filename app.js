@@ -218,6 +218,11 @@ function withAccumulatedBalance(rows, banksByOperator) {
     const row = rows[index];
     const operatorId = String(row.operator_id || '').trim();
     if (!Object.prototype.hasOwnProperty.call(runningByOperator, operatorId)) continue;
+    const bank = banksByOperator[operatorId] || {};
+    if (bank.last_reset_date && row.date <= bank.last_reset_date) {
+      output[index].accumulated_balance_minutes = 0;
+      continue;
+    }
     output[index].accumulated_balance_minutes = runningByOperator[operatorId];
     runningByOperator[operatorId] -= Number(row.balance_minutes || 0);
   }
