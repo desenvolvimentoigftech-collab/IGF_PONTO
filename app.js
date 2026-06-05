@@ -947,7 +947,7 @@ function deletePointDay(key) {
     .then((data) => {
       if (!data.ok) throw new Error(data.error || 'Falha ao excluir ponto');
       statusText.textContent = `Ponto excluido. Linhas removidas: ${data.deleted_records || 0}.`;
-      loadRecords();
+      setTimeout(() => window.location.reload(), 500);
     })
     .catch((error) => {
       statusText.textContent = `Erro: ${error.message}`;
