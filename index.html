@@ -306,6 +306,15 @@
           </label>
         </div>
         <p id="exportModalText">A planilha sera baixada em formato XLS com os pontos do periodo selecionado.</p>
+        <div id="exportProgress" class="exportProgress" hidden>
+          <div class="exportProgressHeader">
+            <span id="exportProgressLabel">Preparando exportacao...</span>
+            <strong id="exportProgressPercent">0%</strong>
+          </div>
+          <div class="exportProgressTrack" aria-hidden="true">
+            <div id="exportProgressFill" class="exportProgressFill"></div>
+          </div>
+        </div>
         <div class="modalActions">
           <button id="confirmExportButton" type="button">EXPORTAR</button>
           <button id="cancelExportButton" type="button" class="secondaryButton">CANCELAR</button>
@@ -313,6 +322,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=20260605-8"></script>
+    <script src="app.js?v=20260605-11"></script>
   </body>
 </html>

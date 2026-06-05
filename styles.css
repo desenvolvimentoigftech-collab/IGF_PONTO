@@ -370,6 +370,44 @@ button:disabled {
   display: none;
 }
 
+.exportProgress {
+  margin-top: 16px;
+}
+
+.exportProgress[hidden] {
+  display: none;
+}
+
+.exportProgressHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.exportProgressHeader strong {
+  min-width: 42px;
+  text-align: right;
+}
+
+.exportProgressTrack {
+  height: 10px;
+  margin-top: 8px;
+  overflow: hidden;
+  background: #e7edf3;
+  border: 1px solid var(--line);
+}
+
+.exportProgressFill {
+  width: 0%;
+  height: 100%;
+  background: #166534;
+  transition: width 280ms ease;
+}
+
 .tableWrap {
   overflow-x: auto;
 }

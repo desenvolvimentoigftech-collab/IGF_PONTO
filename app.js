@@ -23,6 +23,10 @@ const confirmResetBankButton = document.querySelector('#confirmResetBankButton')
 const cancelResetBankButton = document.querySelector('#cancelResetBankButton');
 const exportModal = document.querySelector('#exportModal');
 const exportModalText = document.querySelector('#exportModalText');
+const exportProgress = document.querySelector('#exportProgress');
+const exportProgressLabel = document.querySelector('#exportProgressLabel');
+const exportProgressPercent = document.querySelector('#exportProgressPercent');
+const exportProgressFill = document.querySelector('#exportProgressFill');
 const confirmExportButton = document.querySelector('#confirmExportButton');
 const cancelExportButton = document.querySelector('#cancelExportButton');
 const exportKindInputs = Array.from(document.querySelectorAll('input[name="exportKind"]'));
@@ -74,6 +78,8 @@ let adjustmentPoints = [];
 let directEditMode = false;
 let registerPassword = '';
 let collaborators = [];
+let exportInProgress = false;
+let exportProgressTimer = null;
 
 const today = new Date();
 fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -147,7 +153,9 @@ function openExportModal() {
 }
 
 function closeExportModal() {
+  if (exportInProgress) return;
   exportModal.hidden = true;
+  resetExportProgress();
 }
 
 function updateExportFields() {
@@ -159,10 +167,11 @@ function updateExportFields() {
   exportFromLabel.hidden = isIndividual || mode !== 'period';
   exportToLabel.hidden = isIndividual || mode !== 'period';
   exportModalText.textContent = isIndividual
-    ? 'A folha individual exige senha para buscar dados cadastrais e gera um XLS mensal do funcionario.'
+    ? 'A folha individual exige senha, usa o modelo do Google Sheets e baixa um XLSX mensal.'
     : operatorInput.value.trim()
       ? `A exportacao sera filtrada pelo operador ${operatorInput.value.trim()}.`
       : 'A exportacao incluira todos os operadores do periodo selecionado.';
+  if (!exportInProgress) resetExportProgress();
 }
 
 function selectedExportKind() {
@@ -257,23 +266,80 @@ function confirmIndividualExport() {
   params.set('password', password);
 
   statusText.textContent = 'Gerando folha individual pelo modelo...';
-  confirmExportButton.disabled = true;
+  startExportProgress();
 
   jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
     .then((data) => {
       if (!data.ok) throw new Error(data.error || 'Falha ao gerar folha individual');
 
+      const downloadUrl = data.download_url || data.xlsx_url || data.pdf_url || data.sheet_url;
+      completeExportProgress();
       closeExportModal();
-      statusText.innerHTML = `Folha individual gerada: <a href="${data.sheet_url}" target="_blank" rel="noopener">abrir planilha</a>`;
-      window.open(data.sheet_url, '_blank');
+      statusText.innerHTML = `Folha individual gerada: <a href="${escapeAttr(downloadUrl)}" target="_blank" rel="noopener">baixar XLSX</a> | <a href="${escapeAttr(data.sheet_url)}" target="_blank" rel="noopener">abrir planilha</a>`;
+      window.open(downloadUrl, '_blank');
     })
     .catch((error) => {
+      stopExportProgress();
       exportModalText.textContent = `Erro: ${error.message}`;
       statusText.textContent = `Erro: ${error.message}`;
     })
     .finally(() => {
+      exportInProgress = false;
       confirmExportButton.disabled = false;
+      cancelExportButton.disabled = false;
     });
+}
+
+function startExportProgress() {
+  const steps = [
+    { at: 8, label: 'Preparando dados...' },
+    { at: 28, label: 'Montando folha individual...' },
+    { at: 52, label: 'Aplicando modelo...' },
+    { at: 74, label: 'Exportando planilha...' },
+    { at: 92, label: 'Finalizando download...' }
+  ];
+  const startedAt = Date.now();
+  exportInProgress = true;
+  confirmExportButton.disabled = true;
+  cancelExportButton.disabled = true;
+  setExportProgress(4, 'Preparando exportacao...');
+  clearInterval(exportProgressTimer);
+  exportProgressTimer = setInterval(() => {
+    const elapsed = Date.now() - startedAt;
+    const percent = Math.min(92, Math.floor(4 + elapsed / 180));
+    const step = steps.slice().reverse().find((item) => percent >= item.at) || steps[0];
+    setExportProgress(percent, step.label);
+  }, 350);
+}
+
+function completeExportProgress() {
+  clearInterval(exportProgressTimer);
+  exportInProgress = false;
+  setExportProgress(100, 'Arquivo pronto.');
+}
+
+function stopExportProgress() {
+  clearInterval(exportProgressTimer);
+  exportInProgress = false;
+  confirmExportButton.disabled = false;
+  cancelExportButton.disabled = false;
+}
+
+function resetExportProgress() {
+  clearInterval(exportProgressTimer);
+  exportProgress.hidden = true;
+  exportProgressFill.style.width = '0%';
+  exportProgressPercent.textContent = '0%';
+  exportProgressLabel.textContent = 'Preparando exportacao...';
+}
+
+function setExportProgress(percent, label) {
+  const value = Math.max(0, Math.min(100, Math.floor(percent)));
+  exportProgress.hidden = false;
+  exportProgressFill.style.width = `${value}%`;
+  exportProgressPercent.textContent = `${value}%`;
+  exportProgressLabel.textContent = label;
+  exportModalText.textContent = label;
 }
 
 function exportRowsToXls(rows, range, summary) {
