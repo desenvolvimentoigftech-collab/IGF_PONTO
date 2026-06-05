@@ -120,6 +120,10 @@ button {
   grid-column: span 2;
 }
 
+.wideField {
+  grid-column: span 3;
+}
+
 .formActions {
   display: flex;
   align-items: end;
@@ -290,17 +294,40 @@ button:disabled {
   margin-top: 20px;
 }
 
-.exportModal {
-  width: min(540px, 100%);
+.lockedPanel {
+  padding: 18px;
+  color: var(--muted);
+  font-weight: 700;
 }
 
+.collaboratorForm {
+  border-top: 1px solid var(--line);
+}
+
+.compactTable {
+  min-width: 860px;
+}
+
+.exportModal {
+  width: min(620px, 100%);
+}
+
+.exportKind,
 .exportOptions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-top: 16px;
 }
 
+.exportKind {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.exportOptions {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.exportKind label,
 .exportOptions label {
   display: flex;
   align-items: center;
@@ -311,6 +338,7 @@ button:disabled {
   color: var(--ink);
 }
 
+.exportKind input,
 .exportOptions input {
   width: auto;
   height: auto;
@@ -328,6 +356,17 @@ button:disabled {
 }
 
 .exportDates label[hidden] {
+  display: none;
+}
+
+.individualExportFields {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.individualExportFields[hidden] {
   display: none;
 }
 
@@ -460,8 +499,10 @@ tr.adjustment-recusado td {
 
   .topActions,
   .modalActions,
+  .exportKind,
   .exportOptions,
-  .exportDates {
+  .exportDates,
+  .individualExportFields {
     grid-template-columns: 1fr;
     flex-direction: column;
   }
@@ -477,6 +518,10 @@ tr.adjustment-recusado td {
   }
 
   .formGrid label:nth-child(6) {
+    grid-column: auto;
+  }
+
+  .wideField {
     grid-column: auto;
   }
 }

@@ -1,4 +1,6 @@
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAxUus03Hx0Q6B7NIDDM1-lYn2hmcyq1flfl6DEY0HCsPa2uq6iWuYLz2XKexsNmGs/exec';
+const COMPANY_NAME = 'Igf Servicos Engenharia E Consultoria Ltda';
+const COMPANY_CNPJ = '29.752.156.0001/00';
 
 const operatorInput = document.querySelector('#operatorInput');
 const fromInput = document.querySelector('#fromInput');
@@ -23,6 +25,7 @@ const exportModal = document.querySelector('#exportModal');
 const exportModalText = document.querySelector('#exportModalText');
 const confirmExportButton = document.querySelector('#confirmExportButton');
 const cancelExportButton = document.querySelector('#cancelExportButton');
+const exportKindInputs = Array.from(document.querySelectorAll('input[name="exportKind"]'));
 const exportModeInputs = Array.from(document.querySelectorAll('input[name="exportMode"]'));
 const exportDayInput = document.querySelector('#exportDayInput');
 const exportFromInput = document.querySelector('#exportFromInput');
@@ -30,9 +33,27 @@ const exportToInput = document.querySelector('#exportToInput');
 const exportDayLabel = document.querySelector('#exportDayLabel');
 const exportFromLabel = document.querySelector('#exportFromLabel');
 const exportToLabel = document.querySelector('#exportToLabel');
+const individualExportFields = document.querySelector('#individualExportFields');
+const exportCollaboratorInput = document.querySelector('#exportCollaboratorInput');
+const exportMonthInput = document.querySelector('#exportMonthInput');
 const tabButtons = Array.from(document.querySelectorAll('.tabButton'));
 const tabPanels = Array.from(document.querySelectorAll('.tabPanel'));
 const knownOperators = document.querySelector('#knownOperators');
+const unlockRegisterButton = document.querySelector('#unlockRegisterButton');
+const registerStatus = document.querySelector('#registerStatus');
+const registerLocked = document.querySelector('#registerLocked');
+const registerContent = document.querySelector('#registerContent');
+const collaboratorsBody = document.querySelector('#collaboratorsBody');
+const collaboratorForm = document.querySelector('#collaboratorForm');
+const collaboratorIdInput = document.querySelector('#collaboratorIdInput');
+const collaboratorNameInput = document.querySelector('#collaboratorNameInput');
+const collaboratorRoleInput = document.querySelector('#collaboratorRoleInput');
+const collaboratorPisInput = document.querySelector('#collaboratorPisInput');
+const collaboratorCtpsInput = document.querySelector('#collaboratorCtpsInput');
+const collaboratorCtpsSeriesInput = document.querySelector('#collaboratorCtpsSeriesInput');
+const collaboratorAdmissionInput = document.querySelector('#collaboratorAdmissionInput');
+const collaboratorActiveInput = document.querySelector('#collaboratorActiveInput');
+const collaboratorNotesInput = document.querySelector('#collaboratorNotesInput');
 const adjustForm = document.querySelector('#adjustForm');
 const adjustOperatorInput = document.querySelector('#adjustOperatorInput');
 const adjustNameInput = document.querySelector('#adjustNameInput');
@@ -51,6 +72,8 @@ let currentRows = [];
 let operatorNames = {};
 let adjustmentPoints = [];
 let directEditMode = false;
+let registerPassword = '';
+let collaborators = [];
 
 const today = new Date();
 fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -66,11 +89,16 @@ confirmResetBankButton.addEventListener('click', confirmResetBank);
 cancelResetBankButton.addEventListener('click', closeResetModal);
 confirmExportButton.addEventListener('click', confirmExport);
 cancelExportButton.addEventListener('click', closeExportModal);
+exportKindInputs.forEach((input) => input.addEventListener('change', updateExportFields));
 exportModeInputs.forEach((input) => input.addEventListener('change', updateExportFields));
 tabButtons.forEach((button) => button.addEventListener('click', () => {
   if (button.dataset.tab === 'adjustPanel') setAdjustmentMode(false);
+  if (button.dataset.tab === 'registerPanel' && registerPassword) loadCollaborators();
   activateTab(button.dataset.tab);
 }));
+unlockRegisterButton.addEventListener('click', unlockRegister);
+collaboratorsBody.addEventListener('click', handleCollaboratorAction);
+collaboratorForm.addEventListener('submit', saveCollaborator);
 adjustForm.addEventListener('submit', submitAdjustment);
 addAdjustPointButton.addEventListener('click', addAdjustmentPoint);
 restartAdjustPointsButton.addEventListener('click', restartAdjustmentPoints);
@@ -112,9 +140,8 @@ function openExportModal() {
   exportDayInput.value = dateInputValue(now);
   exportFromInput.value = dateInputValue(firstDay);
   exportToInput.value = dateInputValue(lastDay);
-  exportModalText.textContent = operatorInput.value.trim()
-    ? `A exportacao sera filtrada pelo operador ${operatorInput.value.trim()}.`
-    : 'A exportacao incluira todos os operadores do periodo selecionado.';
+  exportMonthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  populateExportCollaborators();
   exportModal.hidden = false;
   updateExportFields();
 }
@@ -124,10 +151,23 @@ function closeExportModal() {
 }
 
 function updateExportFields() {
+  const isIndividual = selectedExportKind() === 'individual';
   const mode = selectedExportMode();
-  exportDayLabel.hidden = mode !== 'day';
-  exportFromLabel.hidden = mode !== 'period';
-  exportToLabel.hidden = mode !== 'period';
+  individualExportFields.hidden = !isIndividual;
+  exportModeInputs.forEach((input) => { input.closest('label').hidden = isIndividual; });
+  exportDayLabel.hidden = isIndividual || mode !== 'day';
+  exportFromLabel.hidden = isIndividual || mode !== 'period';
+  exportToLabel.hidden = isIndividual || mode !== 'period';
+  exportModalText.textContent = isIndividual
+    ? 'A folha individual exige senha para buscar dados cadastrais e gera um XLS mensal do funcionario.'
+    : operatorInput.value.trim()
+      ? `A exportacao sera filtrada pelo operador ${operatorInput.value.trim()}.`
+      : 'A exportacao incluira todos os operadores do periodo selecionado.';
+}
+
+function selectedExportKind() {
+  const selected = exportKindInputs.find((input) => input.checked);
+  return selected ? selected.value : 'simple';
 }
 
 function selectedExportMode() {
@@ -158,6 +198,10 @@ function resolveExportRange() {
 }
 
 function confirmExport() {
+  if (selectedExportKind() === 'individual') {
+    confirmIndividualExport();
+    return;
+  }
   const range = resolveExportRange();
   if (!range.ok) {
     exportModalText.textContent = range.error;
@@ -179,6 +223,54 @@ function confirmExport() {
       exportRowsToXls(rows, range, data.summary || {});
       closeExportModal();
       statusText.textContent = `Planilha exportada com ${rows.length} dia(s).`;
+    })
+    .catch((error) => {
+      exportModalText.textContent = `Erro: ${error.message}`;
+      statusText.textContent = `Erro: ${error.message}`;
+    })
+    .finally(() => {
+      confirmExportButton.disabled = false;
+    });
+}
+
+function confirmIndividualExport() {
+  const operatorId = exportCollaboratorInput.value;
+  const month = exportMonthInput.value;
+  if (!operatorId) {
+    exportModalText.textContent = 'Selecione o funcionario.';
+    return;
+  }
+  if (!month) {
+    exportModalText.textContent = 'Selecione o mes.';
+    return;
+  }
+  const password = prompt('Digite a senha para exportar a folha individual:');
+  if (!password) return;
+
+  const fromDate = `${month}-01`;
+  const endDate = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0);
+  const toDate = dateInputValue(endDate);
+  const params = new URLSearchParams();
+  params.set('action', 'list');
+  params.set('operator_id', operatorId);
+  params.set('from', `${fromDate} 00:00:00`);
+  params.set('to', `${toDate} 23:59:59`);
+  params.set('max', '5000');
+
+  statusText.textContent = 'Exportando folha individual...';
+  confirmExportButton.disabled = true;
+  Promise.all([
+    jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`),
+    fetchCollaborators(password)
+  ])
+    .then(([recordsData, collaboratorList]) => {
+      collaborators = collaboratorList;
+      populateExportCollaborators();
+      const collaborator = collaboratorList.find((item) => String(item.operator_id) === String(operatorId)) || { operator_id: operatorId };
+      const rows = normalizeDailyRows(recordsData.daily_rows || []);
+      exportIndividualSheetToXls(rows, collaborator, month);
+      closeExportModal();
+      statusText.textContent = 'Folha individual exportada.';
     })
     .catch((error) => {
       exportModalText.textContent = `Erro: ${error.message}`;
@@ -251,6 +343,118 @@ function exportRowsToXls(rows, range, summary) {
   const link = document.createElement('a');
   link.href = url;
   link.download = `folha_ponto_${range.fromDate}_${range.toDate}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportIndividualSheetToXls(rows, collaborator, month) {
+  const year = Number(month.slice(0, 4));
+  const monthIndex = Number(month.slice(5, 7)) - 1;
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const rowsByDay = {};
+  rows.forEach((row) => {
+    const day = Number(String(row.date || '').slice(8, 10));
+    if (day) rowsByDay[day] = row;
+  });
+
+  const dayRows = [];
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(year, monthIndex, day);
+    const row = rowsByDay[day] || null;
+    const weekend = date.getDay() === 0 || date.getDay() === 6;
+    const label = date.getDay() === 0 ? 'DOMINGO' : date.getDay() === 6 ? 'SABADO' : '';
+    dayRows.push(`
+      <tr class="${weekend ? 'weekend' : ''}">
+        <td>${day}</td>
+        <td>${escapeHtml(weekend && !row ? label : pointExportText(row && row.entrada1))}</td>
+        <td>${escapeHtml(pointExportText(row && row.saida1))}</td>
+        <td>${escapeHtml(pointExportText(row && row.entrada2))}</td>
+        <td>${escapeHtml(pointExportText(row && row.saida2))}</td>
+        <td>${row ? formatMinutes(row.worked_minutes || 0) : ''}</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+    `);
+  }
+
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; }
+      table { border-collapse: collapse; width: 980px; table-layout: fixed; }
+      td, th { border: 1px solid #000; padding: 4px; font-size: 11px; vertical-align: middle; }
+      .title { font-size: 22px; font-weight: 700; text-align: center; border: 0; padding: 14px; }
+      .label { font-size: 9px; color: #222; }
+      .value { font-size: 13px; font-weight: 700; }
+      .center { text-align: center; }
+      .head { background: #f2f2f2; font-weight: 700; text-align: center; }
+      .weekend td { background: #bfbfbf; text-align: center; }
+      .signature { height: 26px; }
+    </style>
+  </head>
+  <body>
+    <table>
+      <colgroup>
+        <col style="width: 46px"><col style="width: 100px"><col style="width: 100px"><col style="width: 100px"><col style="width: 100px">
+        <col style="width: 80px"><col style="width: 80px"><col style="width: 80px"><col style="width: 80px"><col style="width: 214px">
+      </colgroup>
+      <tr><td class="title" colspan="10">FOLHA DE PONTO INDIVIDUAL DE TRABALHO</td></tr>
+      <tr>
+        <td colspan="7"><div class="label">EMPREGADOR / NOME - EMPRESA:</div><div class="value">${escapeHtml(COMPANY_NAME)}</div></td>
+        <td colspan="3"><div class="label">CNPJ:</div><div class="value center">${escapeHtml(COMPANY_CNPJ)}</div></td>
+      </tr>
+      <tr>
+        <td colspan="5"><div class="label">EMPREGADO(A):</div><div class="value">${escapeHtml(collaborator.name || '')}</div></td>
+        <td colspan="2"><div class="label">ID OPERADOR:</div><div class="value center">${escapeHtml(collaborator.operator_id || '')}</div></td>
+        <td colspan="3"><div class="label">DATA DE ADMISSAO:</div><div class="value center">${escapeHtml(formatDisplayDateOrEmpty(collaborator.admission_date))}</div></td>
+      </tr>
+      <tr>
+        <td colspan="4"><div class="label">FUNCAO:</div><div class="value">${escapeHtml(collaborator.role || '')}</div></td>
+        <td colspan="2"><div class="label">PIS:</div><div class="value center">${escapeHtml(collaborator.pis || '')}</div></td>
+        <td colspan="2"><div class="label">CTPS / SERIE:</div><div class="value center">${escapeHtml([collaborator.ctps, collaborator.ctps_series].filter(Boolean).join(' / '))}</div></td>
+        <td><div class="label">MES:</div><div class="value center">${escapeHtml(monthName(new Date(year, monthIndex, 1)))}</div></td>
+        <td><div class="label">ANO:</div><div class="value center">${year}</div></td>
+      </tr>
+      <tr>
+        <th rowspan="2" class="head">DIAS</th>
+        <th class="head">ENTRADA</th>
+        <th colspan="2" class="head">ALMOCO</th>
+        <th class="head">SAIDA</th>
+        <th class="head">TOTAL HS</th>
+        <th colspan="2" class="head">EXTRAS</th>
+        <th class="head">TOTAL HS</th>
+        <th rowspan="2" class="head">ASSINATURA OU VISTO DO(A) EMPREGADO(A)</th>
+      </tr>
+      <tr>
+        <th class="head">MANHA</th>
+        <th class="head">SAIDA</th>
+        <th class="head">RETORNO</th>
+        <th class="head">TARDE</th>
+        <th class="head">NORMAIS</th>
+        <th class="head">ENTRADA</th>
+        <th class="head">SAIDA</th>
+        <th class="head">EXTRAS</th>
+      </tr>
+      ${dayRows.join('')}
+      <tr><td colspan="10" class="signature">Assinatura do empregado: ________________________________________________</td></tr>
+    </table>
+  </body>
+</html>`;
+  downloadHtmlAsXls(html, `folha_individual_${collaborator.operator_id || 'operador'}_${month}.xls`);
+}
+
+function downloadHtmlAsXls(html, filename) {
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -547,6 +751,132 @@ function updateKnownOperators(rows) {
     .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
     .map((id) => `<option value="${escapeAttr(id)}">${escapeHtml(operatorNames[id])}</option>`)
     .join('');
+  populateExportCollaborators();
+}
+
+function populateExportCollaborators() {
+  const byId = {};
+  Object.keys(operatorNames).forEach((id) => {
+    byId[id] = { operator_id: id, name: operatorNames[id] };
+  });
+  collaborators.forEach((item) => {
+    if (item.operator_id) byId[item.operator_id] = item;
+  });
+  const current = exportCollaboratorInput.value || operatorInput.value.trim();
+  exportCollaboratorInput.innerHTML = Object.keys(byId)
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
+    .map((id) => {
+      const item = byId[id];
+      const name = item.name || operatorNames[id] || '';
+      return `<option value="${escapeAttr(id)}">${escapeHtml(id)} - ${escapeHtml(name || 'Sem nome')}</option>`;
+    })
+    .join('');
+  if (current && byId[current]) exportCollaboratorInput.value = current;
+}
+
+function unlockRegister() {
+  const password = prompt('Digite a senha para acessar cadastros:');
+  if (!password) return;
+  registerPassword = password;
+  loadCollaborators();
+}
+
+function fetchCollaborators(password) {
+  const params = new URLSearchParams();
+  params.set('action', 'list_collaborators');
+  params.set('password', password);
+  return jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      if (!data.ok) throw new Error(data.error || 'Falha ao carregar colaboradores');
+      return data.collaborators || [];
+    });
+}
+
+function loadCollaborators() {
+  if (!registerPassword) return;
+  registerStatus.textContent = 'Carregando cadastros...';
+  fetchCollaborators(registerPassword)
+    .then((items) => {
+      collaborators = items;
+      renderCollaborators();
+      populateExportCollaborators();
+      registerLocked.hidden = true;
+      registerContent.hidden = false;
+      registerStatus.textContent = `Cadastros carregados: ${items.length}`;
+    })
+    .catch((error) => {
+      registerPassword = '';
+      registerLocked.hidden = false;
+      registerContent.hidden = true;
+      registerStatus.textContent = `Erro: ${error.message}`;
+    });
+}
+
+function renderCollaborators() {
+  collaboratorsBody.innerHTML = collaborators.length
+    ? collaborators.map((item) => `
+      <tr>
+        <td>${escapeHtml(item.operator_id || '')}</td>
+        <td>${escapeHtml(item.name || '-')}</td>
+        <td>${escapeHtml(item.role || '-')}</td>
+        <td>${escapeHtml(item.pis || '-')}</td>
+        <td>${escapeHtml(item.active || 'SIM')}</td>
+        <td><button type="button" class="smallButton" data-collaborator-id="${escapeAttr(item.operator_id)}">Editar</button></td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="6">Nenhum colaborador cadastrado.</td></tr>';
+}
+
+function handleCollaboratorAction(event) {
+  const button = event.target.closest('[data-collaborator-id]');
+  if (!button) return;
+  const item = collaborators.find((collaborator) => String(collaborator.operator_id) === String(button.dataset.collaboratorId));
+  if (!item) return;
+  collaboratorIdInput.value = item.operator_id || '';
+  collaboratorNameInput.value = item.name || '';
+  collaboratorRoleInput.value = item.role || '';
+  collaboratorPisInput.value = item.pis || '';
+  collaboratorCtpsInput.value = item.ctps || '';
+  collaboratorCtpsSeriesInput.value = item.ctps_series || '';
+  collaboratorAdmissionInput.value = item.admission_date || '';
+  collaboratorActiveInput.value = item.active || 'SIM';
+  collaboratorNotesInput.value = item.notes || '';
+  registerStatus.textContent = `Editando operador ${item.operator_id}`;
+}
+
+function saveCollaborator(event) {
+  event.preventDefault();
+  if (!registerPassword) {
+    registerStatus.textContent = 'Informe a senha antes de salvar.';
+    return;
+  }
+  if (!collaboratorIdInput.value.trim()) {
+    registerStatus.textContent = 'Selecione um colaborador para editar.';
+    return;
+  }
+  const params = new URLSearchParams();
+  params.set('action', 'save_collaborator');
+  params.set('password', registerPassword);
+  params.set('operator_id', collaboratorIdInput.value.trim());
+  params.set('name', collaboratorNameInput.value.trim());
+  params.set('role', collaboratorRoleInput.value.trim());
+  params.set('pis', collaboratorPisInput.value.trim());
+  params.set('ctps', collaboratorCtpsInput.value.trim());
+  params.set('ctps_series', collaboratorCtpsSeriesInput.value.trim());
+  params.set('admission_date', collaboratorAdmissionInput.value);
+  params.set('active', collaboratorActiveInput.value);
+  params.set('notes', collaboratorNotesInput.value.trim());
+
+  registerStatus.textContent = 'Salvando cadastro...';
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      if (!data.ok) throw new Error(data.error || 'Falha ao salvar cadastro');
+      registerStatus.textContent = 'Cadastro salvo.';
+      loadCollaborators();
+    })
+    .catch((error) => {
+      registerStatus.textContent = `Erro: ${error.message}`;
+    });
 }
 
 function fillKnownOperatorName() {
@@ -833,6 +1163,10 @@ function monthName(date) {
 function formatDisplayDate(value) {
   const [year, month, day] = String(value).split('-');
   return `${day}/${month}/${year}`;
+}
+
+function formatDisplayDateOrEmpty(value) {
+  return value ? formatDisplayDate(value) : '';
 }
 
 function formatMinutes(minutes) {

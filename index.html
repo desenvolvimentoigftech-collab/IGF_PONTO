@@ -25,6 +25,7 @@
       <nav class="tabs">
         <button class="tabButton active" type="button" data-tab="historyPanel">Historico</button>
         <button class="tabButton" type="button" data-tab="adjustPanel">Ajuste de ponto</button>
+        <button class="tabButton" type="button" data-tab="registerPanel">Cadastros</button>
       </nav>
 
       <section class="panel filters">
@@ -165,6 +166,80 @@
         </form>
       </section>
 
+      <section id="registerPanel" class="tabPanel panel" hidden>
+        <div class="sectionHeader">
+          <h2>Cadastros</h2>
+          <div class="headerActions">
+            <button id="unlockRegisterButton" type="button">Entrar com senha</button>
+            <span id="registerStatus" class="muted">Bloqueado</span>
+          </div>
+        </div>
+        <div id="registerLocked" class="lockedPanel">
+          Informe a senha para visualizar e editar dados cadastrais dos colaboradores.
+        </div>
+        <div id="registerContent" hidden>
+          <div class="tableWrap">
+            <table class="compactTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nome</th>
+                  <th>Funcao</th>
+                  <th>PIS</th>
+                  <th>Ativo</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="collaboratorsBody"></tbody>
+            </table>
+          </div>
+          <form id="collaboratorForm" class="formGrid collaboratorForm">
+            <label>
+              ID operador
+              <input id="collaboratorIdInput" type="text" readonly>
+            </label>
+            <label>
+              Nome
+              <input id="collaboratorNameInput" type="text">
+            </label>
+            <label>
+              Funcao
+              <input id="collaboratorRoleInput" type="text">
+            </label>
+            <label>
+              PIS
+              <input id="collaboratorPisInput" type="text">
+            </label>
+            <label>
+              CTPS
+              <input id="collaboratorCtpsInput" type="text">
+            </label>
+            <label>
+              Serie CTPS
+              <input id="collaboratorCtpsSeriesInput" type="text">
+            </label>
+            <label>
+              Data admissao
+              <input id="collaboratorAdmissionInput" type="date">
+            </label>
+            <label>
+              Ativo
+              <select id="collaboratorActiveInput">
+                <option value="SIM">SIM</option>
+                <option value="NAO">NAO</option>
+              </select>
+            </label>
+            <label class="wideField">
+              Observacoes
+              <input id="collaboratorNotesInput" type="text">
+            </label>
+            <div class="formActions">
+              <button id="saveCollaboratorButton" type="submit">Salvar cadastro</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
       <datalist id="knownOperators"></datalist>
     </main>
 
@@ -182,6 +257,16 @@
     <div id="exportModal" class="modalBackdrop" hidden>
       <div class="modal exportModal">
         <h2>Exportar planilha</h2>
+        <div class="exportKind">
+          <label>
+            <input type="radio" name="exportKind" value="simple" checked>
+            Relatorio simples
+          </label>
+          <label>
+            <input type="radio" name="exportKind" value="individual">
+            Folha individual
+          </label>
+        </div>
         <div class="exportOptions">
           <label>
             <input type="radio" name="exportMode" value="month" checked>
@@ -210,6 +295,16 @@
             <input id="exportToInput" type="date">
           </label>
         </div>
+        <div id="individualExportFields" class="individualExportFields" hidden>
+          <label>
+            Funcionario
+            <select id="exportCollaboratorInput"></select>
+          </label>
+          <label>
+            Mes
+            <input id="exportMonthInput" type="month">
+          </label>
+        </div>
         <p id="exportModalText">A planilha sera baixada em formato XLS com os pontos do periodo selecionado.</p>
         <div class="modalActions">
           <button id="confirmExportButton" type="button">EXPORTAR</button>
@@ -218,6 +313,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=20260605-3"></script>
+    <script src="app.js?v=20260605-4"></script>
   </body>
 </html>
