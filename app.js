@@ -236,41 +236,36 @@ function confirmExport() {
 function confirmIndividualExport() {
   const operatorId = exportCollaboratorInput.value;
   const month = exportMonthInput.value;
+
   if (!operatorId) {
     exportModalText.textContent = 'Selecione o funcionario.';
     return;
   }
+
   if (!month) {
     exportModalText.textContent = 'Selecione o mes.';
     return;
   }
+
   const password = prompt('Digite a senha para exportar a folha individual:');
   if (!password) return;
 
-  const fromDate = `${month}-01`;
-  const endDate = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0);
-  const toDate = dateInputValue(endDate);
   const params = new URLSearchParams();
-  params.set('action', 'list');
+  params.set('action', 'generate_individual_sheet');
   params.set('operator_id', operatorId);
-  params.set('from', `${fromDate} 00:00:00`);
-  params.set('to', `${toDate} 23:59:59`);
-  params.set('max', '5000');
+  params.set('month_key', month);
+  params.set('password', password);
 
-  statusText.textContent = 'Exportando folha individual...';
+  statusText.textContent = 'Gerando folha individual pelo modelo...';
   confirmExportButton.disabled = true;
-  Promise.all([
-    jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`),
-    fetchCollaborators(password)
-  ])
-    .then(([recordsData, collaboratorList]) => {
-      collaborators = collaboratorList;
-      populateExportCollaborators();
-      const collaborator = collaboratorList.find((item) => String(item.operator_id) === String(operatorId)) || { operator_id: operatorId };
-      const rows = normalizeDailyRows(recordsData.daily_rows || []);
-      exportIndividualSheetToXls(rows, collaborator, month);
+
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      if (!data.ok) throw new Error(data.error || 'Falha ao gerar folha individual');
+
       closeExportModal();
-      statusText.textContent = 'Folha individual exportada.';
+      statusText.innerHTML = `Folha individual gerada: <a href="${data.sheet_url}" target="_blank" rel="noopener">abrir planilha</a>`;
+      window.open(data.sheet_url, '_blank');
     })
     .catch((error) => {
       exportModalText.textContent = `Erro: ${error.message}`;
