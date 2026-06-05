@@ -925,7 +925,7 @@ function deletePointDay(key) {
   const row = currentRows.find((item) => rowKey(item) === key);
   if (!row) return;
   const label = `${formatDisplayDate(row.date)} - operador ${row.operator_id || '-'}`;
-  const confirmed = confirm(`Excluir o ponto/dia ${label}? Depois da senha, todos os pontos desse dia para este colaborador deixam de valer no calculo e o dia sera excluido do historico/banco.`);
+  const confirmed = confirm(`Excluir o ponto/dia ${label}? Depois da senha, as linhas originais desse dia serao removidas da aba Registros e o dia desaparecera do historico/banco.`);
   if (!confirmed) return;
   const password = prompt('Digite a senha para excluir o ponto:');
   if (!password) return;
@@ -946,7 +946,7 @@ function deletePointDay(key) {
   jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
     .then((data) => {
       if (!data.ok) throw new Error(data.error || 'Falha ao excluir ponto');
-      statusText.textContent = 'Ponto excluido.';
+      statusText.textContent = `Ponto excluido. Linhas removidas: ${data.deleted_records || 0}.`;
       loadRecords();
     })
     .catch((error) => {
