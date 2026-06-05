@@ -33,10 +33,12 @@ const adjustPointsList = document.querySelector('#adjustPointsList');
 const adjustReasonInput = document.querySelector('#adjustReasonInput');
 const adjustRequesterInput = document.querySelector('#adjustRequesterInput');
 const adjustStatus = document.querySelector('#adjustStatus');
+const adjustSubmitButton = document.querySelector('#adjustSubmitButton');
 let activeBankOperatorId = '';
 let currentRows = [];
 let operatorNames = {};
 let adjustmentPoints = [];
+let directEditMode = false;
 
 const today = new Date();
 fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -49,7 +51,10 @@ refreshButton.addEventListener('click', loadRecords);
 resetBankButton.addEventListener('click', beginResetBank);
 confirmResetBankButton.addEventListener('click', confirmResetBank);
 cancelResetBankButton.addEventListener('click', closeResetModal);
-tabButtons.forEach((button) => button.addEventListener('click', () => activateTab(button.dataset.tab)));
+tabButtons.forEach((button) => button.addEventListener('click', () => {
+  if (button.dataset.tab === 'adjustPanel') setAdjustmentMode(false);
+  activateTab(button.dataset.tab);
+}));
 adjustForm.addEventListener('submit', submitAdjustment);
 addAdjustPointButton.addEventListener('click', addAdjustmentPoint);
 restartAdjustPointsButton.addEventListener('click', restartAdjustmentPoints);
@@ -373,17 +378,47 @@ function handleRecordAction(event) {
 function openAdjustmentForRow(key) {
   const row = currentRows.find((item) => rowKey(item) === key);
   if (!row) return;
+  setAdjustmentMode(true);
   adjustOperatorInput.value = row.operator_id || '';
   adjustNameInput.value = row.collaborator_name || '';
   adjustDateInput.value = row.date || '';
-  adjustReasonInput.value = '';
+  adjustReasonInput.value = 'Edicao direta do ponto';
+  adjustRequesterInput.value = '';
   adjustPointTimeInput.value = '';
-  restartAdjustmentPoints();
+  adjustmentPoints = pointsFromRow(row);
+  adjustPointEventInput.value = adjustmentPoints.length % 2 === 0 ? 'Entrada' : 'Saida';
+  renderAdjustmentPoints();
+  adjustStatus.textContent = 'Edicao direta: ao salvar, a senha sera solicitada e o dia sera alterado imediatamente.';
   activateTab('adjustPanel');
+}
+
+function setAdjustmentMode(isDirect) {
+  directEditMode = isDirect;
+  adjustSubmitButton.textContent = isDirect ? 'Salvar edicao com senha' : 'Enviar dia ajustado';
+  if (!isDirect) adjustStatus.textContent = 'Pronto';
 }
 
 function rowKey(row) {
   return `${row.date}|${row.operator_id}`;
+}
+
+function pointsFromRow(row) {
+  return ['entrada1', 'saida1', 'entrada2', 'saida2']
+    .map((slot) => row[slot])
+    .filter(Boolean)
+    .concat(row.extras || [])
+    .map((point) => ({
+      event: normalizePointEvent(point.event),
+      time: point.time || ''
+    }))
+    .filter((point) => point.event && point.time)
+    .sort((a, b) => timeToSortable(a.time) - timeToSortable(b.time));
+}
+
+function normalizePointEvent(value) {
+  const text = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (text.includes('saida')) return 'Saida';
+  return 'Entrada';
 }
 
 function addAdjustmentPoint() {
@@ -474,30 +509,38 @@ function submitAdjustment(event) {
     return;
   }
   if (!adjustmentPoints.length) {
-    const confirmed = confirm('Voce esta enviando este ajuste sem nenhum ponto. Se ele for aprovado, todos os pontos desse dia para este colaborador deixam de valer no calculo e o dia sera excluido do historico/banco. Deseja continuar?');
+    const emptyMessage = directEditMode
+      ? 'Voce esta salvando esta edicao sem nenhum ponto. Depois da senha, todos os pontos desse dia para este colaborador deixam de valer no calculo e o dia sera excluido do historico/banco. Deseja continuar?'
+      : 'Voce esta enviando este ajuste sem nenhum ponto. Se ele for aprovado, todos os pontos desse dia para este colaborador deixam de valer no calculo e o dia sera excluido do historico/banco. Deseja continuar?';
+    const confirmed = confirm(emptyMessage);
     if (!confirmed) {
       adjustStatus.textContent = 'Envio vazio cancelado.';
       return;
     }
   }
+  const password = directEditMode ? prompt('Digite a senha para salvar a edicao direta:') : '';
+  if (directEditMode && !password) return;
   const row = currentRows.find((item) => item.date === adjustDateInput.value && String(item.operator_id) === String(adjustOperatorInput.value.trim()));
   const params = new URLSearchParams();
-  params.set('action', 'request_adjustment');
+  params.set('action', directEditMode ? 'direct_adjustment' : 'request_adjustment');
   params.set('operator_id', adjustOperatorInput.value.trim());
   params.set('collaborator_name', adjustNameInput.value.trim());
   params.set('date', adjustDateInput.value);
   params.set('points_json', JSON.stringify(adjustmentPoints));
   params.set('reason', adjustReasonInput.value.trim());
   params.set('requester', adjustRequesterInput.value.trim());
+  params.set('approver', adjustRequesterInput.value.trim() || 'Site');
+  if (directEditMode) params.set('password', password);
   params.set('original_summary', originalDaySummary(row));
 
-  adjustStatus.textContent = 'Enviando ajuste...';
+  adjustStatus.textContent = directEditMode ? 'Salvando edicao...' : 'Enviando ajuste...';
   jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
     .then((data) => {
-      if (!data.ok) throw new Error(data.error || 'Falha ao solicitar ajuste');
-      adjustStatus.textContent = 'Ajuste enviado para aprovacao.';
+      if (!data.ok) throw new Error(data.error || (directEditMode ? 'Falha ao salvar edicao' : 'Falha ao solicitar ajuste'));
+      adjustStatus.textContent = directEditMode ? 'Edicao aplicada.' : 'Ajuste enviado para aprovacao.';
       adjustForm.reset();
       restartAdjustmentPoints();
+      setAdjustmentMode(false);
       loadRecords();
       activateTab('historyPanel');
     })
