@@ -21,7 +21,6 @@
 
       <nav class="tabs">
         <button class="tabButton active" type="button" data-tab="historyPanel">Historico</button>
-        <button class="tabButton" type="button" data-tab="punchPanel">Bater ponto</button>
         <button class="tabButton" type="button" data-tab="adjustPanel">Ajuste de ponto</button>
       </nav>
 
@@ -110,37 +109,6 @@
         </div>
       </section>
 
-      <section id="punchPanel" class="tabPanel panel" hidden>
-        <div class="sectionHeader">
-          <h2>Bater ponto</h2>
-          <span id="punchStatus" class="muted">Pronto</span>
-        </div>
-        <form id="punchForm" class="formGrid">
-          <label>
-            Operador
-            <input id="punchOperatorInput" list="knownOperators" type="text" inputmode="numeric" required>
-          </label>
-          <label>
-            Nome
-            <input id="punchNameInput" type="text" required>
-          </label>
-          <label>
-            Evento
-            <select id="punchEventInput" required>
-              <option value="Entrada">Entrada</option>
-              <option value="Saida">Saida</option>
-            </select>
-          </label>
-          <label>
-            Foto
-            <input id="punchPhotoInput" type="file" accept="image/*" capture="user" required>
-          </label>
-          <div class="formActions">
-            <button type="submit">Registrar ponto</button>
-          </div>
-        </form>
-      </section>
-
       <section id="adjustPanel" class="tabPanel panel" hidden>
         <div class="sectionHeader">
           <h2>Ajuste de ponto</h2>
@@ -208,6 +176,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=20260604-11"></script>
+    <script src="app.js?v=20260604-12"></script>
   </body>
 </html>

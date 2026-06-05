@@ -21,12 +21,6 @@ const cancelResetBankButton = document.querySelector('#cancelResetBankButton');
 const tabButtons = Array.from(document.querySelectorAll('.tabButton'));
 const tabPanels = Array.from(document.querySelectorAll('.tabPanel'));
 const knownOperators = document.querySelector('#knownOperators');
-const punchForm = document.querySelector('#punchForm');
-const punchOperatorInput = document.querySelector('#punchOperatorInput');
-const punchNameInput = document.querySelector('#punchNameInput');
-const punchEventInput = document.querySelector('#punchEventInput');
-const punchPhotoInput = document.querySelector('#punchPhotoInput');
-const punchStatus = document.querySelector('#punchStatus');
 const adjustForm = document.querySelector('#adjustForm');
 const adjustOperatorInput = document.querySelector('#adjustOperatorInput');
 const adjustNameInput = document.querySelector('#adjustNameInput');
@@ -56,13 +50,10 @@ resetBankButton.addEventListener('click', beginResetBank);
 confirmResetBankButton.addEventListener('click', confirmResetBank);
 cancelResetBankButton.addEventListener('click', closeResetModal);
 tabButtons.forEach((button) => button.addEventListener('click', () => activateTab(button.dataset.tab)));
-punchForm.addEventListener('submit', submitPunch);
 adjustForm.addEventListener('submit', submitAdjustment);
 addAdjustPointButton.addEventListener('click', addAdjustmentPoint);
 restartAdjustPointsButton.addEventListener('click', restartAdjustmentPoints);
-[punchOperatorInput, adjustOperatorInput].forEach((input) => {
-  input.addEventListener('change', () => fillKnownOperatorName(input));
-});
+adjustOperatorInput.addEventListener('change', fillKnownOperatorName);
 recordsBody.addEventListener('click', handleRecordAction);
 
 loadRecords();
@@ -365,11 +356,10 @@ function updateKnownOperators(rows) {
     .join('');
 }
 
-function fillKnownOperatorName(input) {
-  const name = operatorNames[input.value.trim()];
+function fillKnownOperatorName() {
+  const name = operatorNames[adjustOperatorInput.value.trim()];
   if (!name) return;
-  if (input === punchOperatorInput && !punchNameInput.value.trim()) punchNameInput.value = name;
-  if (input === adjustOperatorInput && !adjustNameInput.value.trim()) adjustNameInput.value = name;
+  if (!adjustNameInput.value.trim()) adjustNameInput.value = name;
 }
 
 function handleRecordAction(event) {
@@ -554,87 +544,6 @@ function approveAdjustment(adjustmentId) {
     .catch((error) => {
       statusText.textContent = `Erro: ${error.message}`;
     });
-}
-
-function submitPunch(event) {
-  event.preventDefault();
-  punchStatus.textContent = 'Obtendo localizacao e foto...';
-  Promise.all([getCurrentPosition(), fileToBase64(punchPhotoInput.files[0])])
-    .then(([position, photo]) => {
-      const now = new Date();
-      const payload = {
-        timestamp_local: formatLocalDateTime(now),
-        timestamp_iso: now.toISOString(),
-        event: punchEventInput.value,
-        operator_id: punchOperatorInput.value.trim(),
-        collaborator_name: punchNameInput.value.trim(),
-        device_token: 'site',
-        site: 'Site',
-        offline_origin: false,
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy_m: Math.round(position.coords.accuracy || 0),
-        maps_url: `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`,
-        photo_base64: photo.base64,
-        photo_mime_type: photo.mime,
-        photo_filename: `ponto_${punchOperatorInput.value.trim()}_${Date.now()}.jpg`,
-        id: `site_${Date.now()}`
-      };
-      return postJsonNoCors(payload);
-    })
-    .then(() => {
-      punchStatus.textContent = 'Ponto enviado.';
-      punchForm.reset();
-      setTimeout(loadRecords, 1800);
-      activateTab('historyPanel');
-    })
-    .catch((error) => {
-      punchStatus.textContent = `Erro: ${error.message}`;
-    });
-}
-
-function getCurrentPosition() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Navegador sem localizacao'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error('Localizacao obrigatoria')), {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0
-    });
-  });
-}
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    if (!file) {
-      reject(new Error('Foto obrigatoria'));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result || '');
-      resolve({ mime: file.type || 'image/jpeg', base64: value.split(',')[1] || '' });
-    };
-    reader.onerror = () => reject(new Error('Falha ao ler foto'));
-    reader.readAsDataURL(file);
-  });
-}
-
-function postJsonNoCors(payload) {
-  return fetch(DEFAULT_SCRIPT_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
-  });
-}
-
-function formatLocalDateTime(date) {
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function parseDate(value) {
