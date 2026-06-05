@@ -433,6 +433,7 @@ function renderAdjustmentPoints() {
 }
 
 function pointsSummary(points) {
+  if (!(points || []).length) return 'Sem pontos - excluir dia do calculo';
   return (points || []).map((point, index) => `${index + 1}. ${point.event} ${point.time}`).join(' | ');
 }
 
@@ -467,14 +468,17 @@ function timeToSortable(time) {
 
 function submitAdjustment(event) {
   event.preventDefault();
-  if (!adjustmentPoints.length) {
-    adjustStatus.textContent = 'Inclua pelo menos um ponto ajustado.';
-    return;
-  }
   const validation = validateAdjustmentSequence(adjustmentPoints);
   if (!validation.ok) {
     adjustStatus.textContent = validation.error;
     return;
+  }
+  if (!adjustmentPoints.length) {
+    const confirmed = confirm('Voce esta enviando este ajuste sem nenhum ponto. Se ele for aprovado, todos os pontos desse dia para este colaborador deixam de valer no calculo e o dia sera excluido do historico/banco. Deseja continuar?');
+    if (!confirmed) {
+      adjustStatus.textContent = 'Envio vazio cancelado.';
+      return;
+    }
   }
   const row = currentRows.find((item) => item.date === adjustDateInput.value && String(item.operator_id) === String(adjustOperatorInput.value.trim()));
   const params = new URLSearchParams();
