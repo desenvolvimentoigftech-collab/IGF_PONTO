@@ -288,7 +288,10 @@ function dailyRow(row) {
       <td><span class="badge ${statusClass}">${escapeHtml(row.status || 'OK')}</span></td>
       <td>${formatWarnings(row)}</td>
       <td>
-        <button type="button" class="smallButton" data-action="edit-point" data-row-key="${escapeAttr(rowKey(row))}">Editar ponto</button>
+        <div class="actionStack">
+          <button type="button" class="smallButton" data-action="edit-point" data-row-key="${escapeAttr(rowKey(row))}">Editar ponto</button>
+          <button type="button" class="smallButton rejectButton" data-action="delete-point-day" data-row-key="${escapeAttr(rowKey(row))}">Excluir ponto</button>
+        </div>
         ${pendingAdjustments.map((item) => `
           <button type="button" class="smallButton approveButton" data-action="approve-adjustment" data-adjustment-id="${escapeAttr(item.id)}">Aprovar ajuste</button>
           <button type="button" class="smallButton rejectButton" data-action="reject-adjustment" data-adjustment-id="${escapeAttr(item.id)}">Recusar</button>
@@ -371,6 +374,7 @@ function handleRecordAction(event) {
   const button = event.target.closest('button[data-action]');
   if (!button) return;
   if (button.dataset.action === 'edit-point') openAdjustmentForRow(button.dataset.rowKey);
+  if (button.dataset.action === 'delete-point-day') deletePointDay(button.dataset.rowKey);
   if (button.dataset.action === 'approve-adjustment') approveAdjustment(button.dataset.adjustmentId);
   if (button.dataset.action === 'reject-adjustment') rejectAdjustment(button.dataset.adjustmentId);
 }
@@ -400,6 +404,39 @@ function setAdjustmentMode(isDirect) {
 
 function rowKey(row) {
   return `${row.date}|${row.operator_id}`;
+}
+
+function deletePointDay(key) {
+  const row = currentRows.find((item) => rowKey(item) === key);
+  if (!row) return;
+  const label = `${formatDisplayDate(row.date)} - operador ${row.operator_id || '-'}`;
+  const confirmed = confirm(`Excluir o ponto/dia ${label}? Depois da senha, todos os pontos desse dia para este colaborador deixam de valer no calculo e o dia sera excluido do historico/banco.`);
+  if (!confirmed) return;
+  const password = prompt('Digite a senha para excluir o ponto:');
+  if (!password) return;
+  const approver = prompt('Responsavel pela exclusao:') || 'Site';
+  const params = new URLSearchParams();
+  params.set('action', 'direct_adjustment');
+  params.set('operator_id', row.operator_id || '');
+  params.set('collaborator_name', row.collaborator_name || '');
+  params.set('date', row.date || '');
+  params.set('points_json', '[]');
+  params.set('reason', 'Exclusao direta do ponto/dia');
+  params.set('requester', approver);
+  params.set('approver', approver);
+  params.set('password', password);
+  params.set('original_summary', originalDaySummary(row));
+
+  statusText.textContent = 'Excluindo ponto...';
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      if (!data.ok) throw new Error(data.error || 'Falha ao excluir ponto');
+      statusText.textContent = 'Ponto excluido.';
+      loadRecords();
+    })
+    .catch((error) => {
+      statusText.textContent = `Erro: ${error.message}`;
+    });
 }
 
 function pointsFromRow(row) {
