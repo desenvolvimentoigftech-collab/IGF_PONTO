@@ -64,6 +64,12 @@ h1 {
   color: var(--top-muted);
 }
 
+.topActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
 button {
   height: 42px;
   border: 0;
@@ -284,6 +290,47 @@ button:disabled {
   margin-top: 20px;
 }
 
+.exportModal {
+  width: min(540px, 100%);
+}
+
+.exportOptions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.exportOptions label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  padding: 0 10px;
+  color: var(--ink);
+}
+
+.exportOptions input {
+  width: auto;
+  height: auto;
+}
+
+.exportDates {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.exportDates label:first-child {
+  grid-column: 1 / -1;
+}
+
+.exportDates label[hidden] {
+  display: none;
+}
+
 .tableWrap {
   overflow-x: auto;
 }
@@ -408,6 +455,14 @@ tr.adjustment-recusado td {
   .topbar,
   .sectionHeader {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topActions,
+  .modalActions,
+  .exportOptions,
+  .exportDates {
+    grid-template-columns: 1fr;
     flex-direction: column;
   }
 

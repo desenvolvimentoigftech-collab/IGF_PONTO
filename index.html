@@ -16,7 +16,10 @@
           <h1>Registro de Ponto IGF</h1>
           <p>Historico, banco de horas, fotos, localizacao e inconsistencias.</p>
         </div>
-        <button id="refreshButton" type="button">Atualizar</button>
+        <div class="topActions">
+          <button id="exportButton" type="button">Exportar</button>
+          <button id="refreshButton" type="button">Atualizar</button>
+        </div>
       </header>
 
       <nav class="tabs">
@@ -176,6 +179,45 @@
       </div>
     </div>
 
-    <script src="app.js?v=20260605-2"></script>
+    <div id="exportModal" class="modalBackdrop" hidden>
+      <div class="modal exportModal">
+        <h2>Exportar planilha</h2>
+        <div class="exportOptions">
+          <label>
+            <input type="radio" name="exportMode" value="month" checked>
+            Mes atual
+          </label>
+          <label>
+            <input type="radio" name="exportMode" value="day">
+            Dia
+          </label>
+          <label>
+            <input type="radio" name="exportMode" value="period">
+            Periodo
+          </label>
+        </div>
+        <div class="exportDates">
+          <label id="exportDayLabel">
+            Dia
+            <input id="exportDayInput" type="date">
+          </label>
+          <label id="exportFromLabel">
+            De
+            <input id="exportFromInput" type="date">
+          </label>
+          <label id="exportToLabel">
+            Ate
+            <input id="exportToInput" type="date">
+          </label>
+        </div>
+        <p id="exportModalText">A planilha sera baixada em formato XLS com os pontos do periodo selecionado.</p>
+        <div class="modalActions">
+          <button id="confirmExportButton" type="button">EXPORTAR</button>
+          <button id="cancelExportButton" type="button" class="secondaryButton">CANCELAR</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js?v=20260605-3"></script>
   </body>
 </html>

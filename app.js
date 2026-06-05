@@ -4,6 +4,7 @@ const operatorInput = document.querySelector('#operatorInput');
 const fromInput = document.querySelector('#fromInput');
 const toInput = document.querySelector('#toInput');
 const statusInput = document.querySelector('#statusInput');
+const exportButton = document.querySelector('#exportButton');
 const refreshButton = document.querySelector('#refreshButton');
 const recordsBody = document.querySelector('#recordsBody');
 const totalDays = document.querySelector('#totalDays');
@@ -18,6 +19,17 @@ const resetModal = document.querySelector('#resetModal');
 const resetModalText = document.querySelector('#resetModalText');
 const confirmResetBankButton = document.querySelector('#confirmResetBankButton');
 const cancelResetBankButton = document.querySelector('#cancelResetBankButton');
+const exportModal = document.querySelector('#exportModal');
+const exportModalText = document.querySelector('#exportModalText');
+const confirmExportButton = document.querySelector('#confirmExportButton');
+const cancelExportButton = document.querySelector('#cancelExportButton');
+const exportModeInputs = Array.from(document.querySelectorAll('input[name="exportMode"]'));
+const exportDayInput = document.querySelector('#exportDayInput');
+const exportFromInput = document.querySelector('#exportFromInput');
+const exportToInput = document.querySelector('#exportToInput');
+const exportDayLabel = document.querySelector('#exportDayLabel');
+const exportFromLabel = document.querySelector('#exportFromLabel');
+const exportToLabel = document.querySelector('#exportToLabel');
 const tabButtons = Array.from(document.querySelectorAll('.tabButton'));
 const tabPanels = Array.from(document.querySelectorAll('.tabPanel'));
 const knownOperators = document.querySelector('#knownOperators');
@@ -45,12 +57,16 @@ fromInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString
 toInput.value = today.toISOString().slice(0, 10);
 
 refreshButton.addEventListener('click', loadRecords);
+exportButton.addEventListener('click', openExportModal);
 [operatorInput, fromInput, toInput, statusInput].forEach((input) => {
   input.addEventListener('change', loadRecords);
 });
 resetBankButton.addEventListener('click', beginResetBank);
 confirmResetBankButton.addEventListener('click', confirmResetBank);
 cancelResetBankButton.addEventListener('click', closeResetModal);
+confirmExportButton.addEventListener('click', confirmExport);
+cancelExportButton.addEventListener('click', closeExportModal);
+exportModeInputs.forEach((input) => input.addEventListener('change', updateExportFields));
 tabButtons.forEach((button) => button.addEventListener('click', () => {
   if (button.dataset.tab === 'adjustPanel') setAdjustmentMode(false);
   activateTab(button.dataset.tab);
@@ -87,6 +103,158 @@ function loadRecords() {
     .catch((error) => {
       statusText.textContent = `Erro: ${error.message}`;
     });
+}
+
+function openExportModal() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  exportDayInput.value = dateInputValue(now);
+  exportFromInput.value = dateInputValue(firstDay);
+  exportToInput.value = dateInputValue(lastDay);
+  exportModalText.textContent = operatorInput.value.trim()
+    ? `A exportacao sera filtrada pelo operador ${operatorInput.value.trim()}.`
+    : 'A exportacao incluira todos os operadores do periodo selecionado.';
+  exportModal.hidden = false;
+  updateExportFields();
+}
+
+function closeExportModal() {
+  exportModal.hidden = true;
+}
+
+function updateExportFields() {
+  const mode = selectedExportMode();
+  exportDayLabel.hidden = mode !== 'day';
+  exportFromLabel.hidden = mode !== 'period';
+  exportToLabel.hidden = mode !== 'period';
+}
+
+function selectedExportMode() {
+  const selected = exportModeInputs.find((input) => input.checked);
+  return selected ? selected.value : 'month';
+}
+
+function resolveExportRange() {
+  const mode = selectedExportMode();
+  const now = new Date();
+  if (mode === 'month') {
+    const fromDate = dateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+    const toDate = dateInputValue(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    return { ok: true, fromDate, toDate, label: `MES ATUAL - ${monthName(now)} ${now.getFullYear()}` };
+  }
+  if (mode === 'day') {
+    if (!exportDayInput.value) return { ok: false, error: 'Informe o dia para exportar.' };
+    return { ok: true, fromDate: exportDayInput.value, toDate: exportDayInput.value, label: `DIA ${formatDisplayDate(exportDayInput.value)}` };
+  }
+  if (!exportFromInput.value || !exportToInput.value) return { ok: false, error: 'Informe as datas De e Ate.' };
+  if (exportFromInput.value > exportToInput.value) return { ok: false, error: 'A data De nao pode ser maior que a data Ate.' };
+  return {
+    ok: true,
+    fromDate: exportFromInput.value,
+    toDate: exportToInput.value,
+    label: `PERIODO ${formatDisplayDate(exportFromInput.value)} A ${formatDisplayDate(exportToInput.value)}`
+  };
+}
+
+function confirmExport() {
+  const range = resolveExportRange();
+  if (!range.ok) {
+    exportModalText.textContent = range.error;
+    return;
+  }
+
+  const params = new URLSearchParams();
+  params.set('action', 'list');
+  params.set('from', `${range.fromDate} 00:00:00`);
+  params.set('to', `${range.toDate} 23:59:59`);
+  params.set('max', '5000');
+  if (operatorInput.value.trim()) params.set('operator_id', operatorInput.value.trim());
+
+  statusText.textContent = 'Exportando planilha...';
+  confirmExportButton.disabled = true;
+  jsonp(`${DEFAULT_SCRIPT_URL}?${params.toString()}`)
+    .then((data) => {
+      const rows = normalizeDailyRows(data.daily_rows || []).reverse();
+      exportRowsToXls(rows, range, data.summary || {});
+      closeExportModal();
+      statusText.textContent = `Planilha exportada com ${rows.length} dia(s).`;
+    })
+    .catch((error) => {
+      exportModalText.textContent = `Erro: ${error.message}`;
+      statusText.textContent = `Erro: ${error.message}`;
+    })
+    .finally(() => {
+      confirmExportButton.disabled = false;
+    });
+}
+
+function exportRowsToXls(rows, range, summary) {
+  const generatedAt = new Date().toLocaleString('pt-BR');
+  const operatorFilter = operatorInput.value.trim() || 'Todos';
+  const bodyRows = rows.length ? rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(formatDisplayDate(row.date))}</td>
+      <td>${escapeHtml(row.weekday || '')}${row.holiday ? ` / FERIADO - ${escapeHtml(row.holiday.name)}` : ''}</td>
+      <td>${escapeHtml(row.operator_id || '')}</td>
+      <td>${escapeHtml(row.collaborator_name || '')}</td>
+      <td>${escapeHtml(pointExportText(row.entrada1))}</td>
+      <td>${escapeHtml(pointExportText(row.saida1))}</td>
+      <td>${escapeHtml(pointExportText(row.entrada2))}</td>
+      <td>${escapeHtml(pointExportText(row.saida2))}</td>
+      <td>${escapeHtml(formatMinutes(row.expected_minutes || 0))}</td>
+      <td>${escapeHtml(formatMinutes(row.worked_minutes || 0))}</td>
+      <td>${escapeHtml(formatSignedMinutes(row.balance_minutes || 0))}</td>
+      <td>${escapeHtml(row.status || '')}</td>
+      <td>${escapeHtml(warningsText(row))}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="13">Nenhum registro encontrado.</td></tr>';
+
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #999; padding: 6px; vertical-align: top; }
+      th { background: #383838; color: #fff; }
+      .title { font-weight: bold; text-align: center; font-size: 16px; }
+    </style>
+  </head>
+  <body>
+    <table>
+      <tr><td class="title" colspan="13">FOLHA DE PONTO - ${escapeHtml(range.label)}</td></tr>
+      <tr><td colspan="2">Gerado em</td><td colspan="4">${escapeHtml(generatedAt)}</td><td colspan="2">Operador</td><td colspan="5">${escapeHtml(operatorFilter)}</td></tr>
+      <tr><td colspan="2">Periodo</td><td colspan="4">${escapeHtml(formatDisplayDate(range.fromDate))} a ${escapeHtml(formatDisplayDate(range.toDate))}</td><td colspan="2">Dias</td><td colspan="5">${escapeHtml(String(rows.length))}</td></tr>
+      <tr><td colspan="2">Total previsto</td><td>${escapeHtml(formatMinutes(summary.expected_minutes || 0))}</td><td colspan="2">Total trabalhado</td><td>${escapeHtml(formatMinutes(summary.worked_minutes || 0))}</td><td colspan="2">Banco</td><td colspan="5">${escapeHtml(formatSignedMinutes(summary.balance_minutes || 0))}</td></tr>
+      <tr>
+        <th>Data</th>
+        <th>Dia</th>
+        <th>Operador</th>
+        <th>Nome</th>
+        <th>Entrada 1</th>
+        <th>Saida 1</th>
+        <th>Entrada 2</th>
+        <th>Saida 2</th>
+        <th>Previsto</th>
+        <th>Trabalhado</th>
+        <th>Saldo</th>
+        <th>Status</th>
+        <th>Ocorrencias</th>
+      </tr>
+      ${bodyRows}
+    </table>
+  </body>
+</html>`;
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `folha_ponto_${range.fromDate}_${range.toDate}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function activateTab(tabId) {
@@ -318,9 +486,17 @@ function formatPointCell(point) {
 }
 
 function formatWarnings(row) {
+  return warningItems(row).map((item) => `<div>${escapeHtml(item)}</div>`).join('') || '-';
+}
+
+function warningsText(row) {
+  return warningItems(row).join(' | ') || '-';
+}
+
+function warningItems(row) {
   const warnings = row.warnings || [];
   const extras = row.extras || [];
-  if (!warnings.length && !extras.length && !(row.adjustments || []).length) return '-';
+  if (!warnings.length && !extras.length && !(row.adjustments || []).length) return [];
   const hasDetailedAdjustments = (row.adjustments || []).length > 0;
   const items = warnings
     .filter((warning) => !hasDetailedAdjustments || !['ajuste_pendente', 'ajuste_aprovado', 'ajuste_recusado'].includes(warning))
@@ -330,7 +506,16 @@ function formatWarnings(row) {
     const status = adjustment.status === 'APROVADO' ? 'Ajuste aprovado' : adjustment.status === 'RECUSADO' ? 'Ajuste recusado' : 'Ajuste pendente';
     items.push(`${status}: ${adjustment.points_summary || pointsSummary(adjustment.points || [])}`);
   });
-  return items.map((item) => `<div>${escapeHtml(item)}</div>`).join('');
+  return items;
+}
+
+function pointExportText(point) {
+  if (!point) return '';
+  const flags = [];
+  if (point.manual_adjustment) flags.push('ajuste');
+  if (point.offline) flags.push('offline');
+  if (point.location_status === 'fora') flags.push('fora do local');
+  return flags.length ? `${point.time || ''} (${flags.join(', ')})` : point.time || '';
 }
 
 function labelWarning(value) {
@@ -634,6 +819,15 @@ function parseDate(value) {
   const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function dateInputValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function monthName(date) {
+  const names = ['JANEIRO', 'FEVEREIRO', 'MARCO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+  return names[date.getMonth()];
 }
 
 function formatDisplayDate(value) {
